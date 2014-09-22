@@ -1,0 +1,47 @@
+---
+title: "Fish Example"
+author: "Betsy Cowdery"
+date: "September 15, 2014"
+output: html_document
+---
+
+You want to know the density of fish in a set of experimental ponds
+
+You observe the following counts in ten ponds: 5,6,7,3,6,5,8,4,4,3
+
+Let 
+
+$x = (5,6,7,3,6,5,8,4,4,3)$
+
+$\mu =$ mean 
+
+$n = 10$ number of samples
+
+Process Model:  $f(x)=\mu$
+
+
+Data model: Poisson Distribution: $P(x) = \prod_i^10 \frac{\mu^x e^{-\mu}}{x_i!}$
+  
+Solution for the analytical MLE
+
+$\ln(P(x)) = \sum_i^{n} \ln(\mu) -n\mu - \sum_1^{n} \log(x!)\\ 
+\frac{\partial \ln(P(x))}{\partial \mu} = -n + \frac{\sum_1^{n}x_i}{\mu}$
+
+Set
+
+$-n + \frac{\sum_1^{n}x_i}{n} = 0\\ \Rightarrow \hat{\mu} =  \frac{\sum_1^{n}x_i}{n} = 5.1$
+
+Thus the estimated mean of this population is 5.1 
+
+```{r}
+obs = sort(c(5,6,7,3,6,5,8,4,4,3))
+hist(obs,c(.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5), freq=FALSE,
+     main="Histogram of observed fish counts and density function of population",
+     xlab = "Number of fish")
+mu = sum(obs)/length(obs)
+x = 0:9
+lines(x,dpois(x,mu),type='s',col=2)
+```
+
+
+

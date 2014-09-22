@@ -1,0 +1,177 @@
+---
+title: "Exercise_02_BC"
+author: "Betsy Cowdery"
+date: "September 15, 2014"
+output: html_document
+---
+# Part 1: Continuous distributions
+
+```{r}
+x = seq(-5,5,by=0.1)
+p = seq(0,1,by=0.01)
+```
+
+## Uniform 
+
+1. Why does the height of the uniform PDF change as the width changes?
+
+The area underneath the uniform distribution must be equal to 1. In other words, $height = \frac{1}{width}$. So if the width increases, the hight decreases and vice versa. 
+
+2. What do the second and third arguments to the uniform specify? What are their default values?
+
+They specify the range of values over which you want to calculate the probabilty of an even occuring. The default is 0 to 1.
+
+## Beta
+
+3. The Beta has a special case, Beta(1,1) that is equivalent to what other PDF?
+
+This is equivalent to the uniform distribution over the range of 0 to 1. 
+
+4. In the first panel, the mean is the same for each line (0.5).  What are the variances? (Hint: you need to calculate this analytically. Look up the distribution in one of the recommended references.)
+
+$$Var(X)=E[(X-\mu)^2]= \frac{\alpha \beta}{(\alpha +\beta)^2(\alpha + \beta +1)}$$
+
+```{r}
+alpha <- beta <- c(5,1,.2)
+for(i in 1:length(alpha)){
+  var <- (alpha[i]*beta[i])/((alpha[i]+beta[i])^2*(alpha[i]+beta[i]+1))
+  print(paste("for alpha = ", alpha[i], " and beta = ",beta[i], " Var = ", var))
+}
+```
+
+5. In the second panel, what are the means and medians of each of these curves?  (Hint: you'll need to calculate the mean analytically and use one of the variants of R's beta function to find the median.)
+
+$$\begin{align*} \mu &= E[X]\\
+&= \int_0^1 x f(x;\alpha,\beta)dx \\
+&= \int_0^1 x\frac{x^{\alpha-1}(1-x)^{\beta-1}}{B(\alpha,\beta)}dx\\
+&= \frac{\alpha}{\alpha + \beta}\\
+\end{align*}$$
+
+```{r}
+alpha <- c(6,6,6,6,6,6)
+beta  <- c(6,4,2,1.25,1,0.25)
+for(i in 1:length(alpha)){
+  mean <- (alpha[i])/(alpha[i]+beta[i])
+  print(paste("for alpha = ", alpha[i], " and beta = ",beta[i], " mean = ", round(mean,4), " and median ~= ", round(qbeta(.5,alpha[i],beta[i]),4)))
+}
+```
+
+
+
+## Log Normal
+
+6. What are the arithmetric and geometric means of the three curves in the first panel? (Reminder: arithmetic means are means in the linear domain, geometric means are means in the log domain)
+
+The mean of a log-normal distribution is the geometric mean = $e^\mu \Rightarrow e^0, e^1, e^2$
+
+If $X$ is a lognormally distributed varialbe, it's expected value equals 
+the arithmetic mean = $e^{\mu + \frac{1}{2}\sigma ^2} \Rightarrow e^{1/2}, e^{3/2}, e^{5/2}$
+
+Recall that because the natural log is a strictly concave function, Jenson's inequality proves that the arithmetic mean will be greater than or equal to the geometric mean.
+
+
+
+## Exponential & Laplace
+
+7. The last two panels compare a normal and a Laplace distribution with the same mean and variance.  How do the two compare?  In particular, compare the difference in the probabilities of extreme events in each distribution.
+
+The tails of the Laplace distribution are fatter and thus predictions for extreme events will be higher, however, both functions asymptotically approach zero at the extremes, so they will agreee for $x$ sufficiently far from the mean. 
+Also, it appears that the Laplace distribution will predict the mean with higher probability than the normal distribution.  
+
+## Gamma
+
+# Part 2: Discrete distributions
+
+## Binomial
+10.  Consider a binomial distribution that has a constant mean, np.  What are the differences in the shape of this distribution if it has a high n and low p vs. a low n and high p?
+
+The plots below are
+
+1) 5 binomial distribution plots where $np = .1$ and $n$ is large, resulting in a small $p$. Overlayed is a Poisson distribution with $\lambda = np$.
+
+2) 5 binomial distribution plots where $np = .9$ and $n$ is small, resulting in a large $p$. Overlayed is a Poisson distribution with $\lambda = np$.
+
+What I observed from these plots is that when n large and p is small, the distribution fits the corresponding Poisson distribution quite well. However, when n is small and p is large, this is not the case. But even in the second group of plots we can see that as  p decreses, the distribution again moves closer to the corresponding Poisson distribution. 
+
+
+
+```{r}
+x <- 0:20
+n = 20
+
+np = .1
+for(i in 15:20){
+  plot(x,dbinom(x,i,np/i), type = 's', ylim = c(0,1) ,main = paste0("n = ",i,", p = ",round(np/i,4)))
+  lines(x,dpois(x,np),type = 's',col=i)
+                }
+
+np = .9
+for(i in 1:5){
+  plot(x,dbinom(x,i,np/i), type = 's', ylim = c(0,1) ,main = paste0("n = ",i,", p = ",round(np/i,4)))
+lines(x,dpois(x,np),type = 's',col=i)
+              }
+```
+
+
+
+## Poisson
+11.  Normal distributions are often applied to count data even though count data can only take on positive integer values.  Is this fair is this to do in these two examples? (i.e. how good is the normal approximation)
+
+In the previous two panels, yes the normal distribution is a good approximation.
+
+For the Poisson distribution we know that as the mean (and subsequently the variation) increases, the distribution converges to normality. For $\lambda = 50$, the Poisson distribution is well approximated by $N(\lambda,\lambda) \Rightarrow N(50,50)$.
+
+Similarly, for the Binomail distribution, as $n$ increases, the distribution converges to normality. So for $n = 100$ and $p = .5$, $B(100,0.5)$ is well approximated by $N(np,np(1-p)) \Rightarrow N(50,25)$.
+
+12. Would the normal be a fair approximation to the Poisson curves for small numbers (the first panel)? How about for the Bionomial for small numbers (earlier panel of figures on the Binomial)?
+
+No, the normal would not be appropriate for either situation. When there are many values observed around 0, the normal distribution will predict values below zero, which is meaningless. The mean of the data needs to be sufficiently far away from 0 for the normal distribution to be used. 
+
+13. Is the Poisson a good approximation of the Binomial?
+14. Is it possible to choose the parameters so that the Poisson and Binomial to both have the same mean and  variance?  If so what is this parameterization?
+
+Looking at both question 13 and 14: 
+
+If we want to see if the Poisson a good approximation of the Binomial, we want to look at the situation where
+$Pois(\lambda) = B(n,p)$. And thus, where the two distributions have the same mean and variance. 
+
+$$\mu_B = np, \qquad Var_B = np(1-p)\\  \mu_P = \lambda, \qquad Var_p = \lambda$$
+
+Thus we want $$np = np(1-p)$$
+
+Thus we can see that the the distributions will have the same mean and variance only when $p=0$ and/or $n = \infty$. This makes sense intuitively since the only times the Poisson looks like a good approximation for the Binomial is when $p$ is sufficiently close to $0$ or when $n$ is sufficiently larger than $0$.
+
+## Negative binomial
+15. In the 'vary size' panel, what are the means of the curves? 
+
+For the Negative Binomial distribution, $\mu = \frac{pr}{1-p}$
+
+Note: in this case since $p=.5, \mu = r$
+
+```{r}
+r = c(1,2,3,5,10)
+p = c(.5,.5,.5,.5,.5)
+
+for(i in 1:length(r)){
+  mean <- (r[i]*p[i])/(1-p[i])
+  print(paste("for size = ", r[i], " and probability = ",p[i], " mean = ", mean))
+}
+```
+
+
+16. In the “vary variance” panel, how does the shape of the Negative Binomial compare to the Poisson?
+
+In the "vary variance" panel, we can observe how changing size = r changes how the negative binomial distribution curve varies from the Poisson distribution. 
+
+We know that 
+$$\mu = \frac{pr}{1-p}, \qquad Var=\frac{\mu}{1-p}, \qquad r = \frac{\mu ^2}{Var - \mu}$$
+
+Suppose we set $\lambda = \mu \Rightarrow p = \frac{\lambda}{r+\lambda}$
+
+Then 
+$$NB(x;r,p) = \frac{\Gamma(x+r)}{x!\Gamma(r)}p^x(1-p)^r$$
+If we examine the limit of this function as $r \rightarrow \infty$
+$$\lim_{r \rightarrow \infty} NB(x;r,p) = \frac{\lambda^x}{x!e^\lambda}$$
+which is just a Poisson distribution around $\lambda$.
+
+So as we increase $r$, the shape of the Negative Binomial approaches $Poisson(\frac{pr}{1-p})$
