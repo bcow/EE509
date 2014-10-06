@@ -251,7 +251,12 @@ Be aware that RStudio has the capacity to auto-complete function names, function
 <pre class="r"><code>save.image(&quot;Lab1_all.RData&quot;)</code></pre>
 <p>These commands will be very helpful if you don’t finish a activity by the end of the period and want to take your whole R desktop home, for saving work in progress, or archiving results of analyses. When you quit R you will be asked if you want to save your desktop and if you answer ‘y’, then save.image is called by default and will save to a file simply named “.Rdata” which is automatically loaded the next time you start R. While this is convenient, I actually recommend against it and suggest using save or save.image explicitly instead because otherwise it is very easy to accidentally use variables and data sets defined in previous analyses, or to be unsure which version of an analysis you’re working with. You can always see what variables you currently have defined in the <strong>Environment</strong> window or by using the command</p>
 <pre class="r"><code>ls()</code></pre>
-<pre><code>## [1] &quot;dat&quot;      &quot;metadata&quot; &quot;x&quot;        &quot;y&quot;        &quot;z&quot;</code></pre>
+<pre><code>##  [1] &quot;d&quot;                &quot;dat&quot;              &quot;i&quot;               
+##  [4] &quot;lklh.poisson&quot;     &quot;log.lklh.poisson&quot; &quot;metadata&quot;        
+##  [7] &quot;mu&quot;               &quot;n&quot;                &quot;N&quot;               
+## [10] &quot;obs&quot;              &quot;p&quot;                &quot;x&quot;               
+## [13] &quot;xaxis&quot;            &quot;y&quot;                &quot;Y&quot;               
+## [16] &quot;z&quot;</code></pre>
 <p>Within the Environment window, clicking on a variable will show you the contents in a spreadsheet-like format in the script window. Finally, while we won’t use these explicitly in this class, there are a large number of other options for getting data in and out of R in specific formats (e.g. GIS data, image data, etc) and ways to connect R to data sources more dynamically (e.g. SQL databases) that can be particularly useful when dealing with large data sets. The <strong>R Data Import/Export</strong> manual on the R website is a place to start to learn more about moving data in and out of R.</p>
 <pre><code>12. Save the frog data file delimited in a pipe-delimited format (i.e. separated by ‘|’). Open the file up in a text editor and cut-and-paste the first few lines of the file into your Rscript file (just so I can see what you did).  Load the data back up into R as ‘dat2’ (show code)</code></pre>
 </div>

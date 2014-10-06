@@ -1,0 +1,218 @@
+---
+title: "Exercise_04_BC"
+author: "Betsy Cowdery"
+date: "September 29, 2014"
+output: html_document
+---
+
+## The Data
+
+```{r echo = F}
+b = read.table("data/pinecones.txt",header=TRUE)
+par(mfrow = c(1,2))
+##histogram of cone counts
+hist(b$c00,breaks=0:92,probability=TRUE,ylim=c(0,1),main="histogram of cone counts" , xlab="cone count")
+
+##plot of counts by tree size (x-axis) and CO2 (AMB is black, CO2 is red)
+plot(b$diam,b$c00,col = c(2,3), xlab ="tree diameter (m)", ylab = "cone count")
+title("Cone counts by tree size
+      colored by CO2 level")
+legend("topleft", c("amb","elv"), pch=c(1,1), col = c(2,3))
+
+
+```
+
+```{r}
+dia   = b$diam        ## tree diameters
+cones = (b$c00 > 0)   ## whether cones are present - indicates tree maturity
+ncone = b$c00       	## number of cones in 2000
+tmt   = b$tmt       	## treatment (elevated vs ambient)
+```
+
+## Fecundity Model
+
+```{r}
+likFec = function(a0,x,y){
+  g <- a0*x^2 ## expected mean fecundity, g(x),as a function of tree size
+  -sum(dpois(y,g,log=TRUE)) ## negative log likelihood
+}
+```
+
+```{r, echo=F}
+out.fec = optimize(likFec,c(0.001,1),x=dia,y=ncone)
+a0 = out.fec$minimum
+
+plot(dia,ncone, xlab ="tree diameter (m)", ylab = "cone count")
+dseq = seq(1,30,length=300)
+lines(dseq,a0*dseq^2,col=3,lwd=3)
+```
+
+## Combined Fecundity and Maturation
+#### Task 1
+Make two plots showing fecundity (dia vs ncone) and maturation (dia vs cones). For each of these plots add different colored lines for g(x) and g(x)⋅θ(x) to the fecundity plot and θ(x) to the maturation plot. Choose the parameters for these functions (a0, b0, b1) so that they produce plots that are reasonable initial conditions given the data. Specify the values for (a0, b0, b1) in R as a vector named “param”.
+
+```{r}
+dseq = seq(1,30,.1)
+a0 = out.fec$minimum
+b0 = 20 #mean(dia)
+b1 = 1
+param = c(a0,b0,b1)
+
+plot(dia,ncone,ylim=c(0,40), xlab ="tree diameter (m)", ylab = "cone count")
+lines(dseq,(a0*dseq^2),col=4,lwd=3)
+lines(dseq,(a0*dseq^2)*(pnorm(dseq,b0,b1)),col=3,lwd=3,lty=2 )
+plot(dia,cones, xlab ="tree diameter (m)", ylab = "presence of cones (boolean)")
+lines(dseq,(pnorm(dseq,b0,b1)),type='l',col=2,lwd=3)
+```
+
+```{r,echo=FALSE}
+lnL = NA
+n   = NA
+```
+
+##### Negative Log Likelihood 
+```{r}
+likfit = function(param,dia,ncone){
+  a0 = param[1]
+  b0 = param[2]
+  b1 = param[3]
+  cones = ncone > 0
+
+  ## trees with cones
+  dia.cone  = dia[cones > 0]                ##find just the trees with cones
+  g.cone = a0 * dia.cone^2          ## Fecundity fnc - g(x)
+  theta.cone    = pnorm(dia.cone,b0,b1,log.p=TRUE)  ## maturation probit
+  prob.cone = theta.cone + dpois(ncone[cones],g.cone,log=TRUE)
+  
+  ##trees with zero counts 
+  dia.zero  = dia[cones == 0]
+  g.zero = a0 * dia.zero^2
+  theta.zero    = pnorm(dia.zero,b0,b1)     ##maturation probit
+  prob.zero = log((1-theta.zero) + theta.zero*dpois(0,g.zero))
+
+  return(-sum(prob.cone,prob.zero))
+}
+```
+```{r}
+likfit(param,dia,ncone)
+```
+
+##### Minimize the Negative Log Likelihood 
+```{r}
+
+out = optim(param,
+             likfit,
+             lower=c(0.001,10,1),
+             upper=c(1,30,10),
+             method="L-BFGS-B",dia=dia,ncone=ncone)
+a0[2]  = out$par[1]
+b0[2]  = out$par[2]
+b1[2]  = out$par[3]
+lnL[2] = out$value
+n[2]   = length(cones)
+out
+```
+
+#### Task 2
+Create new figures that add curves representing the MLE fits to the figures you created in task 1. Also, include the maximum likelihood estimates of the parameters in your lab report
+
+```{r}
+par(mfrow = c(1,2))
+plot(dia,ncone, xlab ="tree diameter (m)", ylab = "cone count")
+lines(dseq,(a0[2]*dseq^2),col=4,lwd=3)
+lines(dseq,(a0[2]*dseq^2)*(pnorm(dseq,b0[2],b1[2])),col=3,lwd=3,lty=2 )
+
+plot(dia,cones)
+lines(dseq,(pnorm(dseq,b0[2],b1[2])),type='l',col=2,lwd=3)
+```
+
+## Effects of Elevated CO2 on Reproduction
+
+#### Task 3
+Repeat analysis for just the ambient C02 treatment and then for just the elevated C02 treatment.
+
+##### Fit the model to just the data from the ambient treatment
+```{r}
+dia.amb   = b$diam[tmt=="AMB"]   ## tree diameters
+ncone.amb = b$c00[tmt=="AMB"]    ## number of cones
+
+out.amb = optim(param,likfit,method="L-BFGS-B",
+             lower=c(0.001,10,1),upper=c(1,30,10),dia=dia.amb,ncone=ncone.amb)
+a0[3]  = out.amb$par[1]
+b0[3]  = out.amb$par[2]
+b1[3]  = out.amb$par[3]
+lnL[3] = out.amb$value
+n[3]   = length(ncone.amb)
+out.amb
+```
+##### Fit the model to just the data from the CO2 treatment
+```{r}
+dia.elev   = b$diam[tmt=="CO2"]   ## tree diameters
+ncone.elev = b$c00[tmt=="CO2"]    ## number of cones
+
+out.elev = optim(param,likfit,method="L-BFGS-B",
+             lower=c(0.001,10,1),upper=c(1,30,10),dia=dia.elev,ncone=ncone.elev)
+a0[4]  = out.elev$par[1]
+b0[4]  = out.elev$par[2]
+b1[4]  = out.elev$par[3]
+lnL[4] = out.elev$value
+n[4]   = length(ncone.elev)
+out.elev
+```
+##### Summary table
+```{r}
+df <- data.frame(a0,b0,b1,lnL,n)
+row.names(df) <- c("estimate", "all","ambient","elevated")
+df
+```
+##### Likelihood Ratio Test
+```{r}
+dev.null = 2*lnL[2]
+dev.tmt  = 2*lnL[3] + 2*lnL[4]
+dev = dev.null - dev.tmt
+pval = 1-pchisq(dev,3)
+
+paste("p-value = ",pval)
+```
+
+#### Task 4
+Create figures analogous to Task 2 that show the fits for the full model, the ambient-only fit, and the elevated-only fit (i.e. 3 lines per graph). 
+
+```{r}
+par(mfrow = c(1,1))
+plot(dia,ncone, main = "Fecundity Model", xlab ="tree diameter (m)", ylab = "cone count")
+lines(dseq,(a0[2]*dseq^2),col=1,lwd=3)
+lines(dseq,(a0[3]*dseq^2),col=2,lwd=3)
+lines(dseq,(a0[4]*dseq^2),col=3,lwd=3)
+legend(2,90, c("all","amb","elv"), lty=c(1,1,1), col=c(1,2,3))
+
+plot(dia,cones, main = "Maturation Model", xlab ="tree diameter (m)", ylab = "presence of cones (boolean)")
+lines(dseq,(pnorm(dseq,b0[2],b1[2])),type='l',col=1,lwd=3)
+lines(dseq,(pnorm(dseq,b0[3],b1[3])),type='l',col=2,lwd=3)
+lines(dseq,(pnorm(dseq,b0[4],b1[4])),type='l',col=3,lwd=3)
+legend(2,.9, c("all","amb","elv"), lty=c(1,1,1), col=c(1,2,3))
+
+plot(dia,ncone, main = "Combined Fecundity and Maturation Model", xlab ="tree diameter (m)", ylab = "cone count")
+lines(dseq,(a0[2]*dseq^2)*(pnorm(dseq,b0[2],b1[2])),col=1,lwd=3 )
+lines(dseq,(a0[3]*dseq^2)*(pnorm(dseq,b0[3],b1[3])),col=2,lwd=3 )
+lines(dseq,(a0[4]*dseq^2)*(pnorm(dseq,b0[4],b1[4])),col=3,lwd=3 )
+legend(2,90, c("all","amb","elv"), lty=c(1,1,1), col=c(1,2,3))
+
+```
+
+
+
+Based on these graphs, the parameter values, and the likelihood ratio test, answer the following questions: 
+
+1. Does elevated CO2 have an effect on fecundity? (Provide explanation for your answer). 
+
+Given the p-value in the likelihood ratio test and the fecundity model plot, it appears that CO2 has a positive effect on fecundity. If we look at the fecundity model curves, we can see that the number of cones per diamaeter size (after about 5) is strictly higher for the trees in the elevated C02 treatment than for those in the ambient CO2 treatment. Furthermore, when we look at the summary statistics for the number of cones in the two treatments, the mean number of cones for elevated CO2 is higher than that for ambient CO2. 
+
+```{r}
+summary(ncone.amb)
+summary(ncone.elev)
+```
+
+2. Is this effect simply due to there being larger trees in the elevated plots, or does CO2 affect the maturation rate and/or the fecundity of trees (i.e. the cone production at a given tree size)? If there is an effect, in what direction is it?
+
+Looking at the curves on the maturation plot, we can see that when a tree has a diameter of approximately 10 or less the different treatments don't seem to have any effect on number of cones. However, as diameter increases, the difference between the ambient and elevated CO2 curves increases. The trees with elevated CO2 consistantly have more cones, which suggests that CO2 does in fact increase maturation rate. If it did not, the three curves should be equal. Furthermore, when we look at the matruation and fecundity combined model, the effect of elevated CO2 is even greater. Thus it appears that CO2 treatment effects both fecundity and maturation and that elevated CO2 leads to an increase in both. 

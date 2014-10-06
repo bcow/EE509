@@ -1,8 +1,8 @@
 ---
-title: 'Lab 1 - R Primer'
+title: "Lab 1 - R Primer"
 author: "GE509"
 date: "September 3, 2014"
-output: html_document
+output: pdf_document
 ---
 
 ## Objectives
