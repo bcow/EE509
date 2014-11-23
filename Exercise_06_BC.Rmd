@@ -1,0 +1,444 @@
+---
+title: "Exercise_06_BC"
+author: "Betsy Cowdery"
+date: "October 14, 2014"
+output: html_document
+---
+## Bayesian Regression using Gibbs Sampling
+
+The standard Bayesian regression model assumes a Normal likelihood, a Normal prior on the regression parameters, and an Inverse Gamma prior on the variance.
+
+$$P(b,\sigma^2 \vert X, y) \propto N_n(y \vert Xb,\sigma^2 I) N_p(b \vert b_0, V_b) IG(\sigma^2 \vert s_1,s_2)$$
+
+Within the Gibbs sampler we will be iteratively sampling from each of the conditional posterior distributions:
+
+The regression parameters given the variance
+
+$$P(b \vert \sigma^2, X, y) \propto N_n(y \vert Xb,\sigma^2 I) N_p(b \vert b_0, V_b)$$
+
+The variance given the regression parameters
+
+$$P(\sigma^2 \vert b, X, y) \propto N_n(y \vert Xb,\sigma^2 I) IG(\sigma^2 \vert s_1,s_2)$$
+
+### Setup & Evaluation
+```{r,echo=FALSE}
+gibbs_loop <- function(n,ngibbs,b0,b1,signma2,plot=F){
+  
+  library(coda) 
+  library(mvtnorm)
+  
+  beta <- matrix(c(b0,b1),2,1)  	## put “true” regression parameters in a matrix
+  
+  x1 <- runif(n,0,20)
+  x <- cbind(rep(1,n),x1)
+  y <- matrix(rnorm(n,x%*%beta,sqrt(sigma2)),n,1)
+  
+  if(plot){plot(x1,y)
+           abline(b0,b1,col=2,lwd=3)
+           }
+  
+  #### specify priors
+  bprior <- as.vector(c(0,0))
+  vinvert <- solve(diag(1000,2))
+  s1 <- 0.1
+  s2 <- 0.1
+  
+  #### precompute frequently used quantities
+  XX <- t(x) %*% x
+  XY <- t(x) %*% y
+  VbB <- vinvert %*% bprior
+  
+  #### storage for MCMC
+  bgibbs <- matrix(0.0,nrow=ngibbs,ncol=2) 	## storage for beta
+  sgibbs <- numeric(ngibbs)			## storage for sigma2
+  
+  #### initial conditions
+  sg <- 50
+  sinv <- 1/sg
+  
+  #### Gibbs Loop
+  for(g in 1:ngibbs){
+    
+    ## sample regression parameters
+    bigV    <- solve(sinv*XX + vinvert)  ## Covariance matrix
+    littlev <- sinv*XY + VbB
+    b = t(rmvnorm(1,bigV %*% littlev,bigV))   ## Vv is the mean vector
+    
+    ## sample variance
+    u1 <- s1 + n/2
+    u2 <- s2 + 0.5*crossprod(y-x%*%b)
+    sinv <- rgamma(1,u1,u2)
+    sg <- 1/sinv
+    
+    ## storage
+    bgibbs[g,] <- b  ## store the current value of beta vector
+    sgibbs[g]  <- sg  ## store the current value of the variance
+    
+    # if(g %%100 == 0) print(g)  ##show how many steps have been performed
+    }
+  
+  out <- list(bgibbs=bgibbs,sgibbs=sgibbs,x1=x1,y=y)
+  return(out)
+  }
+```
+
+```{r}
+n <- 500  ## sample size
+b0 <- 10  ## intercept
+b1 <- 2   ## slope
+sigma2 <- 4^2  ## variance (s.d. = 4)
+ngibbs <- 10  ## number of updates
+par(mfrow = c(1,1))
+out <- gibbs_loop(n,ngibbs,b0,b1,sigma2)
+```
+
+#### diagnostics of the MCMC
+```{r,echo=FALSE}
+mcmc_diag <- function(out,beg,thin,plot=F){
+  
+  ## convert to MCMC object
+  mcmc <- mcmc(cbind(out$bgibbs[seq(from=beg,to=ngibbs,by=thin),],out$sgibbs[seq(from=beg,to=ngibbs,by=thin)]) ) 
+  if(plot){
+    print("var 1 = b0, var2 = b1, var3 = variance")
+    plot(mcmc) ## mcmc history and density plot
+    
+    autocorr.plot(mcmc)  	## autocorrelation
+    cumuplot(mcmc)		## quantile plot
+    
+    print("var 1 = b0, var2 = b1, var3 = variance")
+    print(1-rejectionRate(mcmc))	## acceptance rate
+    print(summary(mcmc))		## summary table
+    
+    par(mfrow = c(1,1))
+    plot(out$bgibbs[,1],out$bgibbs[,2],xlab="b0",ylab="b1",main="b0 vs b1")	## pairs plot to evaluate parameter correlation
+    }
+  return(summary(mcmc))
+  }
+```
+
+```{r}
+beg = 1; thin = 1;
+mcmc_diag(out,beg,thin)
+```
+
+# Task 1
+```{r}
+n <- 500
+ngibbs <- 5000
+out <- gibbs_loop(n,ngibbs,b0,b1,sigma2,plot=T)
+beg = 1; thin = 1;
+par(mfrow = c(2,2))
+sum_mcmc <- mcmc_diag(out,beg,thin,plot=T)
+```
+
+Results from the standard linear regression:
+```{r}
+fit <- lm( out$y ~ out$x1 )
+sfit <- summary(fit)
+sfit
+```
+
+```{r, echo=F}
+b0_comp <- rbind(
+  c(b0,NA,NA,NA),
+  c(sum_mcmc$statistics[1,c("Mean","SD")], sum_mcmc$quantiles[1,c("2.5%","97.5%")]),
+  c(sfit$coefficients[1,1:2], coef(sfit)[1,1]+c(-1,1)*coef(sfit)[1,2]*qt(.975,sfit$fstatistic["dendf"]))
+  )
+rownames(b0_comp) <- c("True Value","Bayesian Regression", "Standard Regression")
+colnames(b0_comp) <- c("Mean","SD","Lower CI", "Upper CI")
+
+
+b1_comp <- rbind(c(b1,NA),sum_mcmc$statistics[2,c("Mean","SD")],sfit$coefficients[2,1:2])
+rownames(b1_comp) <- c("True Value","Bayesian Regression", "Standard Regression")
+
+b1_comp <- rbind(
+  c(b1,NA,NA,NA),
+  c(sum_mcmc$statistics[2,c("Mean","SD")], sum_mcmc$quantiles[2,c("2.5%","97.5%")]),
+  c(sfit$coefficients[2,1:2], coef(sfit)[2,1]+c(-1,1)*coef(sfit)[2,2]*qt(.975,sfit$fstatistic["dendf"]))
+  )
+rownames(b1_comp) <- c("True Value","Bayesian Regression", "Standard Regression")
+colnames(b1_comp) <- c("Mean","SD","Lower CI", "Upper CI")
+
+s2_comp <- rbind(
+  c(16,NA,NA,NA),
+  c(sum_mcmc$statistics[3,c("Mean","SD")], sum_mcmc$quantiles[3,c("2.5%","97.5%")]),
+  c((sfit$sigma)^2,NA,(length(out$x1)-1)*(sfit$sigma)^2/qchisq(.975,(length(out$x1)-1)),(sfit$sigma)^2*(length(out$x1)-1)/qchisq(.025,(length(out$x1)-1)))
+  )
+colnames(b1_comp) <- c("Mean","SD","Lower CI", "Upper CI")
+rownames(s2_comp) <- c("True Value","Bayesian Regression", "Standard Regression")
+
+print("Intercept:")
+b0_comp
+print("Slope:")
+b1_comp
+print("Variance:")
+s2_comp
+
+```
+
+For the intercept and the slope, it looks as though the Bayesan analysis produces almost the exact same means as the standard linear regression. The standard deviation is slightly lower for the Bayesian regression, though by a very small amount. The two models differ more when it comes to the variance - in this case, the linear regression produces a mean variance that is closer to the "true" vale. 
+
+#### Regression Credible Intervals
+```{r,echo=FALSE}
+mcmc_CI <- function(ngibbs,bgibbs,sgibbs,beg,thin,x1,y,b0,b1,plot=F){
+  
+  xpred <- 0:20            ## sequence of x values we're going to
+  npred <- length(xpred)				##      make predictions for
+  ypred <- matrix(0.0,nrow=ngibbs,ncol=npred)	## storage for predictive interval
+  ycred <- matrix(0.0,nrow=ngibbs,ncol=npred)	## storage for credible interval
+  
+  for(g in seq(from=beg,to=ngibbs,by=thin)){
+    Ey <- bgibbs[g,1] + bgibbs[g,2] * xpred
+    ycred[g,] <- Ey
+    ypred[g,] <- rnorm(npred,Ey,sqrt(sgibbs[g]))
+    }
+  
+  ci <- apply(ycred,2,quantile,c(0.025,0.5,0.975))  ## credible interval and median
+  pi <- apply(ypred,2,quantile,c(0.025,0.975))  	## prediction interval
+  
+  if(plot){
+    plot(x1,y,cex=0.5,xlim=c(0,20),ylim=c(0,50))
+    lines(xpred,ci[1,],col=3,lty=2)	## lower CI
+    lines(xpred,ci[2,],col=3,lwd=2)	## median
+    lines(xpred,ci[3,],col=3,lty=2)	## upper CI
+    lines(xpred,pi[1,],col=4,lty=2)	## lower PI
+    lines(xpred,pi[2,],col=4,lty=2)	## upper PI
+    abline(b0,b1)				## true model
+    }
+  }
+```
+
+```{r}
+par(mfrow = c(1,1))
+mcmc_CI(ngibbs,out$bgibbs,out$sgibbs,beg,thin,out$x1,out$y,b0,b1, plot = T)
+```
+
+# Task 2
+
+#### Plots with the pseudo-data, the true model, the 95% credible interval on the model, and the 95% prediction interval for three sample sizes
+
+```{r, echo=FALSE}
+b0_est <- data.frame(b0,NA,NA,NA)
+colnames(b0_est) <- c("mean","SD", "2.5%","97.5%" )
+b1_est <- data.frame(b1,NA,NA,NA)
+colnames(b1_est) <- c("mean","SD", "2.5%","97.5%")
+s2_est  <- data.frame(sigma2,NA,NA,NA)
+colnames(s2_est) <- c("mean","SD", "2.5%","97.5%")
+
+par(mfrow = c(1,3))
+for(n in c(500,50,5)){
+  ngibbs <- 5000
+  out <- gibbs_loop(n,ngibbs,b0,b1,sigma2)
+  beg = 1; thin = 1;
+  sum_mcmc <- mcmc_diag(out,beg,thin)
+  
+  b0_est <- rbind(c(sum_mcmc$statistics[[1,"Mean"]],sum_mcmc$statistics[[1,"SD"]], sum_mcmc$quantiles[[1,"2.5%"]], sum_mcmc$quantiles[[1,"97.5%"]]),b0_est)
+  b1_est <- rbind(c(sum_mcmc$statistics[2,"Mean"],sum_mcmc$statistics[2,"SD"],sum_mcmc$quantiles[2,"2.5%"], sum_mcmc$quantiles[2,"97.5%"]),b1_est)
+  s2_est <- rbind(c(sum_mcmc$statistics[3,"Mean"],sum_mcmc$statistics[3,"SD"],sum_mcmc$quantiles[3,"2.5%"], sum_mcmc$quantiles[3,"97.5%"]),s2_est)
+  
+  mcmc_CI(ngibbs,out$bgibbs,out$sgibbs,beg,thin,out$x1,out$y,b0,b1,plot=T)
+  }
+
+rownames(b0_est) <- c("5","50","500","true")
+rownames(b1_est) <- c("5","50","500","true")
+rownames(s2_est) <- c("5","50","500","true")
+```
+
+Here we can see that increasing the sample size helps tighten both the predicted and ceditible interval around the mean. 
+
+
+#### Summary tables of parameter estimates
+```{r, echo=FALSE}
+print("Intercept:")
+b0_est
+print("Slope:")
+b1_est
+print("Variance:")
+s2_est
+```
+
+#### Plots showing how the estimate of the parameter mean and the 95% CI around that mean changes with sample size.
+
+```{r, echo = F}
+par(mfrow = c(1,3))
+x = c(5,50,500)
+plot(x,b0_est$mean[1:3], 
+     ylim = c(min(b0_est[,"2.5%"],na.rm=T),max(b0_est[,"97.5%"],na.rm=T)), 
+     log="x",
+     xlab = "sample size (log scale)",
+     ylab = "intercept",
+     main = "Estimate of intercept mean \nwith 95% CI")
+arrows(x,b0_est[,"2.5%"],x, b0_est[,"97.5%"],length=0.05, angle=90, code=3)
+abline(h=b0_est$mean[4],lty=2, col=4)
+
+plot(x,b1_est$mean[1:3],
+     ylim = c(min(b1_est[,"2.5%"],na.rm=T),max(b1_est[,"97.5%"],na.rm=T)),
+     log  = "x" ,
+     xlab = "sample size (log scale)",
+     ylab = "slope",
+     main = "Estimate of slope mean \nwith 95% CI")
+arrows(x,b1_est[,"2.5%"],x, b1_est[,"97.5%"],length=0.05, angle=90, code=3)
+abline(h=b1_est$mean[4],lty=2, col=4)
+
+plot(x,s2_est$mean[1:3], ylim = c(min(s2_est[,"2.5%"],na.rm=T),max(s2_est[,"97.5%"],na.rm=T)),
+     log="x" ,
+     xlab = "sample size (log scale)",
+     ylab = "variance",
+     main = "Estimate of variance mean \nwith 95% CI")
+arrows(x,s2_est[,"2.5%"],x, s2_est[,"97.5%"],length=0.05, angle=90, code=3)
+abline(h=s2_est$mean[4],lty=2, col=4)
+
+```
+
+- How does sample size affect the ability to estimate the true model parameters?
+
+Predictions made with a sample size that is too small will have such large error bars, that they can become useless. For example the true variance is 16 but with a sample size of only 5, the estimated mean is ~60 with a standard deviation of ~116. On the other hand, there is a point of diminishing returns where a larger sample size won't dramatically improve the width of the CI - in all three cases the change in width between sample size 5 and 50 is much larger than the change between 50 and 500. Furthermore, when simple size equals 500 the CI is fairly tight - if one were to increase the sample size to 1000, the improvement on the CI would be very small. 
+
+- Does the 95% CI or PI ever fail to encompass the true model? 
+
+No, in this case the true model is contained in the 95% CI and PI. However, in a few cases the true model fell at the very edges of the CI.
+
+- How does the width of the CI change as a function of sample size?
+
+There's to be a strong correlation between sample size and width of CI. As the sample size increases, the width of the CI decreases. 
+
+- What is the (approximate) minimum sample size that would be required to reject the hypothesis that the slope of this line is 3/2 with 95% confidence?
+
+I think one could safely reject 3/2 with a sample size above 30, though maybe one could go down to 20. 
+
+
+# Extra Credit
+Suppose a review of the scientific literature reveals that 95% of the reported values for the slope of the relationship between these two variables fall between 1.5 and 2.5. For the case where n=5 re-run your analysis with the same pseudodata as you did in Task 2 above but incorporating this additional information as a prior constraint on the slope.
+
+```{r,echo=FALSE}
+gibbs_loop_info <- function(n,ngibbs,b0,b1,signma2,plot=F){
+  
+  library(coda) 
+  library(mvtnorm)
+  
+  beta <- matrix(c(b0,b1),2,1)    ## put “true” regression parameters in a matrix
+  
+  x1 <- runif(n,0,20)
+  x <- cbind(rep(1,n),x1)
+  y <- matrix(rnorm(n,x%*%beta,sqrt(sigma2)),n,1)
+  
+  if(plot){plot(x1,y)
+           abline(b0,b1,col=2,lwd=3)
+           }
+  
+  #### specify priors
+  bprior <- as.vector(c(0,2))
+  vinvert <- solve(matrix(c(1000,0,0,((.5)/1.96)^2),ncol=2))
+  s1 <- 0.1
+  s2 <- 0.1
+  
+  #### precompute frequently used quantities
+  XX <- t(x) %*% x
+  XY <- t(x) %*% y
+  VbB <- vinvert %*% bprior
+  
+  #### storage for MCMC
+  bgibbs <- matrix(0.0,nrow=ngibbs,ncol=2) 	## storage for beta
+  sgibbs <- numeric(ngibbs)			## storage for sigma2
+  
+  #### initial conditions
+  sg <- 50
+  sinv <- 1/sg
+  
+  #### Gibbs Loop
+  for(g in 1:ngibbs){
+    
+    ## sample regression parameters
+    bigV    <- solve(sinv*XX + vinvert)  ## Covariance matrix
+    littlev <- sinv*XY + VbB
+    b = t(rmvnorm(1,bigV %*% littlev,bigV))   ## Vv is the mean vector
+    
+    ## sample variance
+    u1 <- s1 + n/2
+    u2 <- s2 + 0.5*crossprod(y-x%*%b)
+    sinv <- rgamma(1,u1,u2)
+    sg <- 1/sinv
+    
+    ## storage
+    bgibbs[g,] <- b  ## store the current value of beta vector
+    sgibbs[g]  <- sg  ## store the current value of the variance
+    
+    # if(g %%100 == 0) print(g)  ##show how many steps have been performed
+    }
+  
+  out <- list(bgibbs=bgibbs,sgibbs=sgibbs,x1=x1,y=y)
+  return(out)
+  }
+```
+
+Changes made in code:
+```{r,eval=FALSE}
+bprior <- as.vector(c(0,0))
+vinvert <- solve(diag(1000,2))
+
+bprior <- as.vector(c(0,2))
+vinvert <- solve(matrix(c(1000,0,0,((.5)/1.96)^2),ncol=2))
+```
+
+
+
+```{r,echo=FALSE}
+n = 5
+ngibbs <- 5000
+out1 <- gibbs_loop(n,ngibbs,b0,b1,sigma2)
+out2 <- gibbs_loop_info(n,ngibbs,b0,b1,sigma2)
+beg = 1; thin = 1;
+sum_mcmc1 <- mcmc_diag(out1,beg,thin, plot = F)
+sum_mcmc2 <- mcmc_diag(out2,beg,thin, plot = F)
+par(mfrow=c(1,2))
+mcmc_CI(ngibbs,out1$bgibbs,out1$sgibbs,beg,thin,out1$x1,out1$y,b0,b1,plot=T)
+title("Uninformative Prior")
+mcmc_CI(ngibbs,out2$bgibbs,out2$sgibbs,beg,thin,out2$x1,out2$y,b0,b1,plot=T)
+title("Informative Prior")
+
+b0_est <- rbind(
+  c(sum_mcmc1$statistics[[1,"Mean"]],sum_mcmc1$statistics[[1,"SD"]], sum_mcmc1$quantiles[[1,"2.5%"]], sum_mcmc1$quantiles[[1,"97.5%"]]),
+  c(sum_mcmc2$statistics[[1,"Mean"]],sum_mcmc2$statistics[[1,"SD"]], sum_mcmc2$quantiles[[1,"2.5%"]], sum_mcmc2$quantiles[[1,"97.5%"]])
+  )
+
+b1_est <- rbind(  
+  c(sum_mcmc1$statistics[[2,"Mean"]],sum_mcmc1$statistics[[2,"SD"]], sum_mcmc1$quantiles[[2,"2.5%"]], sum_mcmc1$quantiles[[2,"97.5%"]]),
+  c(sum_mcmc2$statistics[[2,"Mean"]],sum_mcmc2$statistics[[2,"SD"]], sum_mcmc2$quantiles[[2,"2.5%"]], sum_mcmc2$quantiles[[2,"97.5%"]])
+  )
+
+s2_est <- rbind(  
+  c(sum_mcmc1$statistics[[3,"Mean"]],sum_mcmc1$statistics[[3,"SD"]], sum_mcmc1$quantiles[[3,"2.5%"]], sum_mcmc1$quantiles[[3,"97.5%"]]),
+  c(sum_mcmc2$statistics[[3,"Mean"]],sum_mcmc2$statistics[[3,"SD"]], sum_mcmc2$quantiles[[3,"2.5%"]], sum_mcmc2$quantiles[[3,"97.5%"]])
+  )
+
+rownames(b0_est) <- rownames(b1_est) <- rownames(s2_est) <-c("uninformitive", "informative")
+colnames(b0_est) <- colnames(b1_est) <- colnames(s2_est) <-c("Mean", "SD", "2.5%","97.5%")
+
+```
+
+Including the prior information changes both the width and shape of the CI and PI. 
+Not only does it tighten both intervals overall, the intervals are much more linear, following the regression line. 
+In addition, the mean for the informed model is much closer to the true mean. 
+
+
+
+Intercept:
+```{r,echo=FALSE}
+b0_est
+```
+For intercept, including the prior information decreases the CI, bringing up the lower value a large amount and only slightly decreasing the higher value. The estimated mean changes by a large amount and moves from being negative to positive, which could make a big difference if, for example, biologically the response variable shouldn't be less than 0. 
+
+
+Slope:
+```{r,echo=FALSE}
+b1_est
+```
+For slope, the estimated means in the two models do not differ a great amount but 
+including the prior information does decreases the CI.
+
+
+Variance:
+```{r,echo=FALSE}
+s2_est
+```
+Unlike the other paramteres, including the prior information increases standard deviation and the CI around the estimated mean. The mean estimates themselves do not vary a great deal from one another. 

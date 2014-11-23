@@ -1,0 +1,263 @@
+---
+title: "Project Preliminary Analysis"
+author: "Betsy Cowdery"
+date: "November 21, 2014"
+output: html_document
+---
+
+```{r, echo=FALSE}
+## Set up data
+library(rjags)
+glopnet <- read.csv("~/R Projects/EE509/Project/glopnet.csv")
+glopnet[c("X")] <- NULL
+glopnet[c("X.1")] <- NULL
+glopnet[c("X.2")] <- NULL
+glopnet[c("X.3")] <- NULL
+
+gdata.na <- as.data.frame(cbind(
+  glopnet$log.LL,
+  glopnet$log.LMA,
+  glopnet$log.Amass,
+  glopnet$log.Nmass,
+  glopnet$log.Pmass,
+  glopnet$log.Rdmass
+  ))
+colnames(gdata.na)<-c("Log.LL","Log.LMA","Log.Amass","Log.Nmass","Log.Pmass","Log.Rmass")
+gdata <- na.omit(gdata.na)
+
+run = TRUE
+if(file.exists("jags.outputs.Rdata")){
+  load("jags.outputs.Rdata")
+  run = FALSE
+  }
+```
+
+# Data
+
+#### With NA's 
+```{r,echo=FALSE}
+pairs(gdata.na)
+```
+
+#### Without NA's 
+```{r,echo=FALSE}
+pairs(gdata)
+```
+
+
+# Univariate Model
+
+#### JAGS Model
+```{r, eval=FALSE}
+model{
+  prec.Sigma~dwish(Vsig[,],n)
+  Sigma[1:n,1:n] <- inverse(prec.Sigma[,])
+  
+  mu[1:n]~dmnorm(mu0[],Vmu)
+  
+  for(i in 1:N){
+    for(j in 1:n){
+      X[i,j]~dnorm(Y[i,j],10000000)
+      }
+    Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
+    }
+  }
+```
+
+```{r, echo=FALSE,}
+if(run){
+  UnivModel = "
+  model{
+  prec.sigma~dgamma(.001,.001)
+  sigma <- 1/prec.sigma
+  for(i in 1:n){mu[i]~dnorm(0,.001)}
+  
+  for(i in 1:N){
+  for(j in 1:n){
+  Y[i,j]~dnorm(mu[j],prec.sigma)
+  }
+  }
+  }"
+  
+  
+  # Without na's
+  j.data <- gdata
+  N=dim(j.data)[1]; n=dim(j.data)[2]
+  data = list(Y=j.data, N=N, n=n)
+  init = NULL
+  j.model   <- jags.model (file = textConnection(UnivModel),data = data,inits = init, n.chains = 3)
+  update(j.model, n.iter=1000)
+  j.out   <- coda.samples (model = j.model,variable.names= c("mu"), n.iter = 10000)
+  out3 = j.out
+  
+  
+  # With na's
+  j.data <- gdata.na
+  N=dim(j.data)[1]; n=dim(j.data)[2]
+  data = list(Y=j.data, N=N, n=n)
+  init = NULL
+  j.model   <- jags.model (file = textConnection(UnivModel),data = data,inits = init, n.chains = 3)
+  update(j.model, n.iter=1000)
+  j.out   <- coda.samples (model = j.model,variable.names= c("mu"), n.iter = 10000)
+  out4 = j.out
+  }
+
+```
+
+
+# Multivariate Model
+```{r, eval=FALSE}
+model{
+  prec.Sigma~dwish(Vsig[,],n)
+  Sigma[1:n,1:n] <- inverse(prec.Sigma[,])
+  
+  mu[1:n]~dmnorm(mu0[],Vmu)
+  
+  for(i in 1:N){
+    for(j in 1:n){
+      X[i,j]~dnorm(Y[i,j],10000000)
+      }
+    Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
+    }
+  }
+```
+
+```{r, echo=FALSE}
+if(run){
+MultModel = "
+model{
+prec.Sigma~dwish(Vsig[,],n)
+Sigma[1:n,1:n] <- inverse(prec.Sigma[,])
+
+mu[1:n]~dmnorm(mu0[],Vmu)
+
+for(i in 1:N){
+for(j in 1:n){
+X[i,j]~dnorm(Y[i,j],10000000)
+}
+Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
+}
+}"
+
+# Without na's 
+j.data <- gdata
+N=dim(j.data)[1]; n=dim(j.data)[2]
+data = list(Y=j.data, N=N, n=n, Vsig = diag(n), mu0 = rep(0,n), Vmu = diag(.001,n))
+init = NULL
+j.model   <- jags.model (file = textConnection(MultModel),data = data,inits = init,n.chains = 3)
+update(j.model, n.iter=1000)
+j.out   <- coda.samples (model = j.model,variable.names= c("mu"),n.iter = 10000)
+out1 = j.out
+
+
+# With na's 
+
+j.data <- gdata.na
+N=dim(j.data)[1]; n=dim(j.data)[2]
+data = list(X=j.data, N=N, n=n, Vsig = diag(n), mu0 = rep(0,n), Vmu = diag(.001,n))
+init = NULL
+j.model   <- jags.model (file = textConnection(MultModel), data = data, inits = init, n.chains = 3)
+update(j.model, n.iter=1000)
+j.out   <- coda.samples (model = j.model, variable.names= c("mu"), n.iter = 10000)
+out2 = j.out
+
+
+}
+```
+
+# Comparisons
+
+#### Means
+```{r, echo=FALSE}
+
+out1.df <- as.data.frame(as.matrix(out1))
+out2.df <- as.data.frame(as.matrix(out2))
+out3.df <- as.data.frame(as.matrix(out3))
+out4.df <- as.data.frame(as.matrix(out4))
+
+
+rbind(
+  colMeans(j.data),
+  c(mean(out1.df$"mu[1]"),mean(out1.df$"mu[2]"),mean(out1.df$"mu[3]"),mean(out1.df$"mu[4]"),mean(out1.df$"mu[5]"),mean(out1.df$"mu[6]")),
+  c(mean(out2.df$"mu[1]"),mean(out2.df$"mu[2]"),mean(out2.df$"mu[3]"),mean(out2.df$"mu[4]"),mean(out2.df$"mu[5]"),mean(out2.df$"mu[6]")),
+  c(mean(out3.df$"mu[1]"),mean(out3.df$"mu[2]"),mean(out3.df$"mu[3]"),mean(out3.df$"mu[4]"),mean(out3.df$"mu[5]"),mean(out3.df$"mu[6]")),
+  c(mean(out4.df$"mu[1]"),mean(out4.df$"mu[2]"),mean(out4.df$"mu[3]"),mean(out4.df$"mu[4]"),mean(out4.df$"mu[5]"),mean(out4.df$"mu[6]"))
+  )
+```
+
+
+#### Density function
+```{r, echo=FALSE}
+par(mfrow = c(1,2))
+
+ranges <-  apply(cbind(out1.df$"mu[1]",out2.df$"mu[1]",out3.df$"mu[1]",out4.df$"mu[1]"), 2,
+                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+plot(density(out1.df$"mu[1]"), col="red", 
+     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+     main=paste(names(gdata)[1]))
+lines(density(out2.df$"mu[1]"), col="blue")
+lines(density(out3.df$"mu[1]"), col="red", lty=2)
+lines(density(out4.df$"mu[1]"), col="blue", lty=2)
+
+ranges <-  apply(cbind(out1.df$"mu[2]",out2.df$"mu[2]]",out3.df$"mu[2]",out4.df$"mu[2]"), 2,
+                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+plot(density(out1.df$"mu[2]"), col="red", 
+     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+     main=paste(names(gdata)[2]))
+lines(density(out2.df$"mu[2]"), col="blue")
+lines(density(out3.df$"mu[2]"), col="red", lty=2)
+lines(density(out4.df$"mu[2]"), col="blue", lty=2)
+
+ranges <-  apply(cbind(out1.df$"mu[3]",out2.df$"mu[3]",out3.df$"mu[3]",out4.df$"mu[3]"), 2,
+                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+plot(density(out1.df$"mu[3]"), col="red", 
+     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+     main=paste(names(gdata)[3]))
+lines(density(out2.df$"mu[3]"), col="blue")
+lines(density(out3.df$"mu[3]"), col="red", lty=2)
+lines(density(out4.df$"mu[3]"), col="blue", lty=2)
+
+ranges <-  apply(cbind(out1.df$"mu[4]",out2.df$"mu[4]",out3.df$"mu[4]",out4.df$"mu[4]"), 2,
+                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+plot(density(out1.df$"mu[4]"), col="red", 
+     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+     main=paste(names(gdata)[4]))
+lines(density(out2.df$"mu[4]"), col="blue")
+lines(density(out3.df$"mu[4]"), col="red", lty=2)
+lines(density(out4.df$"mu[4]"), col="blue", lty=2)
+
+ranges <-  apply(cbind(out1.df$"mu[5]",out2.df$"mu[5]",out3.df$"mu[5]",out4.df$"mu[5]"), 2,
+                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+plot(density(out1.df$"mu[5]"), col="red", 
+     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+     main=paste(names(gdata)[5]))
+lines(density(out2.df$"mu[5]"), col="blue")
+lines(density(out3.df$"mu[5]"), col="red", lty=2)
+lines(density(out4.df$"mu[5]"), col="blue", lty=2)
+
+ranges <-  apply(cbind(out1.df$"mu[6]",out2.df$"mu[6]",out3.df$"mu[6]",out4.df$"mu[6]"), 2,
+                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+plot(density(out1.df$"mu[6]"), col="red", 
+     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+     main=paste(names(gdata)[6]))
+lines(density(out2.df$"mu[6]"), col="blue")
+lines(density(out3.df$"mu[6]"), col="red", lty=2)
+lines(density(out4.df$"mu[6]"), col="blue", lty=2)
+
+```
+
+
+
+
+```{r}
+
+```
+
+
+```{r, echo=FALSE}
+
+```
+
+```{r, eval=FALSE}
+
+```

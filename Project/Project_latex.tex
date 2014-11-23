@@ -1,0 +1,128 @@
+\documentclass[11pt,fleqn]{article}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amssymb}
+\usepackage{latexsym, amsmath, amscd,amsthm}
+\usepackage{graphicx}
+\usepackage[percent]{overpic}
+\usepackage{pdfsync}
+\usepackage{units}
+\usepackage{epstopdf}
+\usepackage{pdfpages}
+\usepackage{listings}
+\usepackage{multicol}
+
+\usepackage{paralist}
+\usepackage{color}
+
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+
+\addtolength{\textwidth}{90pt}
+\addtolength{\evensidemargin}{-60pt}
+\addtolength{\oddsidemargin}{-60pt}
+\addtolength{\topmargin}{-70pt}
+\addtolength{\textheight}{2in}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  Begin user defined commands
+
+\newcommand{\map}[1]{\xrightarrow{#1}}
+
+\newcommand{\C}{\mathbb C}
+\newcommand{\F}{\mathbb F}
+%\newcommand{\H}{\mathbb H}
+%\newcommand{\N}{\mathbb N}
+\newcommand{\Z}{\mathbb Z}
+%\newcommand{\P}{\mathbb{P}}
+\newcommand{\Q}{\mathbb Q}
+\newcommand{\R}{\mathbb R}
+\newcommand{\E}{\mathcal{E}}
+
+\newcommand{\eps}{\varepsilon}
+
+
+\newcommand{\zbar}{\overline{\mathbb{Z}}}
+\newcommand{\qbar}{\overline{\mathbb{Q}}}
+
+\newcommand{\la}{\langle}
+\newcommand{\ra}{\rangle}
+\newcommand{\lra}{\longrightarrow}
+\newcommand{\hra}{\hookrightarrow}
+\newcommand{\bs}{\backslash}
+\newcommand{\reci}[1]{\frac{1}{#1}}
+
+\newcommand{\al}{\alpha}
+\newcommand{\be}{\beta}
+
+\newcommand{\vectornorm}[1]{\left|\left|#1\right|\right|}
+
+\DeclareMathOperator{\Aut}{Aut}
+\DeclareMathOperator{\Aff}{Aff}
+\DeclareMathOperator{\End}{End}
+\DeclareMathOperator{\Hom}{Hom}
+\DeclareMathOperator{\im}{im}
+
+
+\newcommand{\tand}{\text{ and }}
+\newcommand{\tfor}{\text{ for }}
+\newcommand{\twith}{\text{ with }}
+\newcommand{\ton}{\text{ on }}
+\newcommand{\tin}{\text{ in }}
+\newcommand{\tif}{\text{ if }}
+\newcommand{\tor}{\text{ or }}
+\newcommand{\tis}{\text{ is }}
+
+
+
+%  End user defined commands
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\setlength{\mathindent}{0cm}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% These establish different environments for stating Theorems, Lemmas, Remarks, etc.
+
+\newtheorem{Thm}{Theorem}
+\newtheorem{Prop}[Thm]{Proposition}
+\newtheorem{Lem}[Thm]{Lemma}
+\newtheorem{Cor}[Thm]{Corollary}
+
+\theoremstyle{definition}
+\newtheorem{Def}[Thm]{Definition}
+
+\theoremstyle{remark}
+\newtheorem{Rem}[Thm]{Remark}
+\newtheorem{Ex}[Thm]{Example}
+
+\theoremstyle{definition}
+\newtheorem{Problem}{Problem}
+
+\newenvironment{Solution}{\noindent{\it Solution.}}{\qed}
+
+
+% $\left[ \begin{matrix} a \\ b  \\ c \end{matrix} \right]$
+
+% End environments 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+\author{Betsy Cowdery}
+\title{PDE's Final Exam}
+\date{}
+
+\maketitle
+
+\noindent
+$
+X \sim N_p(\mu,\Sigma) \\
+X^0_{i,j} \sim N(X_{i,j}, \Sigma_{obs}) \\
+\mu \sim N \\
+\Sigma \sim IW 
+$
+
+
+\end{document}

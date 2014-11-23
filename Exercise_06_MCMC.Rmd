@@ -217,7 +217,7 @@ From these graphs we see that the posterior samples for beta have negligible aut
 ```{r}
 beg = 1
 thin = 1
-bmcmc <- mcmc(bgibbs[seq(from=beg,to=ngibbs,by=thin)])
+bmcmc <- mcmc(bgibbs[seq(from=beg,to=ngibbs,by=thin),])
 ```
 
 

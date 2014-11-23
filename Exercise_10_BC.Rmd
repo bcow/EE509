@@ -1,0 +1,361 @@
+---
+title: "Exercise_10_BC"
+author: "Betsy Cowdery"
+date: "November 17, 2014"
+output: html_document
+---
+  
+```{r,echo=FALSE}
+library(rjags)
+mosq <- read.csv(file = "data//Mosquito.csv")
+mos <- cbind(mosq$rep1,mosq$rep2,mosq$rep3,mosq$rep4,mosq$rep5)
+
+ymax<-max(mos); ymin<-min(mos)
+plot(mosq$time,mos[,1], type="l", col=1, ylim=c(ymin, ymax),main="Mosquito Abundance", xlab="Year", ylab="Abundance")
+legend("bottomleft", inset = .05, title = "Reps", legend = c(1:5), lty = 1, col=1:5)
+lines(mosq$time,mos[,2], col=2)
+lines(mosq$time,mos[,3], col=3)
+lines(mosq$time,mos[,4], col=4)
+lines(mosq$time,mos[,5], col=5)
+
+```
+
+# First Fit
+
+```{r,echo=FALSE}
+FitNorm = "
+model {
+mu ~ dnorm(0,0.001)
+prec ~ dgamma(0.1,0.1)
+sigma <- 1/prec
+for(t in 1:nt){
+for(i in 1:nrep){
+x[t,i] ~ dnorm(mu,prec)    
+}
+px[t] ~ dnorm(mu,prec)
+}
+}"
+
+data = list(x=mos,nt=10,nrep=5)
+init = NULL
+j.model   <- jags.model (file = textConnection(FitNorm),
+                         data = data,
+                         inits = init,
+                         n.chains = 3)
+b1   <- coda.samples (model = j.model,
+                      variable.names = c("mu","sigma","px"),
+                      n.iter = 5100,
+                      burnin=100)
+bmcmc1 = b1
+
+# autocorr.plot(bmcmc1)
+# cumuplot(bmcmc1)
+# gelman.plot(bmcmc1) 
+# plot(bmcmc1) 
+# summary(bmcmc1)
+
+bmcmc1.df <- as.data.frame(as.matrix(bmcmc1))
+q <- quantile(bmcmc1.df$mu,c(0.025,0.5,0.975))
+quants <- cbind(
+  rep(q[1],10), rep(q[2],10), rep(q[3],10)
+)
+
+preds <- rbind(
+  quantile(bmcmc1.df$'px[1]',c(0.025,0.5,0.975)),
+  quantile(bmcmc1.df$'px[2]',c(0.025,0.5,0.975)),
+  quantile(bmcmc1.df$'px[3]',c(0.025,0.5,0.975)),
+  quantile(bmcmc1.df$'px[4]',c(0.025,0.5,0.975)),
+  quantile(bmcmc1.df$'px[5]',c(0.025,0.5,0.975)),
+  quantile(bmcmc1.df$'px[6]',c(0.025,0.5,0.975)),
+  quantile(bmcmc1.df$'px[7]',c(0.025,0.5,0.975)),
+  quantile(bmcmc1.df$'px[8]',c(0.025,0.5,0.975)),
+  quantile(bmcmc1.df$'px[9]',c(0.025,0.5,0.975)),
+  quantile(bmcmc1.df$'px[10]',c(0.025,0.5,0.975)))
+
+ymin=min(preds[,1]);ymax=max(preds[,3])
+plot(mosq$time,mos[,1], type="l", col=8, ylim=c(ymin, ymax),main="Mosquito Abundance", xlab="Year", ylab="Abundance")
+legend("bottomleft", inset = .1, legend = c("PI", "CI", "mean"), lwd = 3, lty = c(2,2,1), col=c(3,2,2))
+lines(mosq$time,mos[,2], col=8)
+lines(mosq$time,mos[,3], col=8)
+lines(mosq$time,mos[,4], col=8)
+lines(mosq$time,mos[,5], col=8)
+lines(mosq$time,quants[,1],lty=2, col=2, lwd=3)
+lines(mosq$time,quants[,2],col=2, lwd=3)
+lines(mosq$time,quants[,3],lty=2,col=2, lwd=3)
+lines(mosq$time,preds[,1],lty=2, col=3, lwd=3)
+lines(mosq$time,preds[,3],lty=2, col=3, lwd=3)
+
+
+update(j.model,100)
+dic1 <- dic.samples(j.model, 10000, "pD")
+```
+
+
+# Random time effect
+
+```{r,echo=FALSE}
+data = list(x=mos,nt=10,nrep=5)
+init.cond1 <- list()
+init.cond1[[1]] = list(mu=7)
+init.cond1[[2]] = list(mu=7.5)
+init.cond1[[3]] = list(mu=8)
+init = init.cond1
+
+FitNorm = "
+model{
+mu ~ dnorm(0,0.001)       ## prior mean
+siginv ~ dgamma(0.001,0.001)   ## prior residual precision
+tauinv ~ dgamma(0.001,0.001)   ## prior year-effect precision
+sigma <- 1/siginv
+tau.t <- 1/tauinv
+
+for(t in 1:nt){           ## loop over years
+alpha.t[t] ~ dnorm(0,tauinv)     ## random year effect
+Ex[t] <- mu + alpha.t[t]        ## process model (does not vary with rep i)
+for(i in 1:nrep){           ## loop over reps
+x[t,i] ~ dnorm(Ex[t],siginv) ## data model
+}
+px[t] ~ dnorm(Ex[t],siginv)  ## predictive interval
+}
+}
+"
+
+j.model   <- jags.model (file = textConnection(FitNorm),
+                         data = data,
+                         inits = init,
+                         n.chains = 3)
+b1   <- coda.samples (model = j.model,
+                      variable.names = c("Ex","px","mu","sigma","tau.t","alpha.t"),
+                      n.iter = 130000,
+                      burnin=2000,
+                      thin=25)
+bmcmc2 = b1
+# autocorr.plot(bmcmc1)
+# cumuplot(bmcmc1)
+# gelman.plot(bmcmc1) 
+# plot(bmcmc1)  
+# summary(bmcmc2) 
+
+update(j.model,2000)
+dic2 <- dic.samples(j.model, n.iter=10000, thin=25, "pD")
+```
+
+```{r,echo=FALSE}
+cipi <- function(mcmc){
+  
+  mcmc.df <- as.data.frame(as.matrix(mcmc))
+  quants <- rbind(
+    quantile(mcmc.df$'Ex[1]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'Ex[2]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'Ex[3]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'Ex[4]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'Ex[5]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'Ex[6]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'Ex[7]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'Ex[8]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'Ex[9]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'Ex[10]',c(0.025,0.5,0.975)))
+  
+  preds <- rbind(
+    quantile(mcmc.df$'px[1]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'px[2]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'px[3]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'px[4]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'px[5]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'px[6]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'px[7]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'px[8]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'px[9]',c(0.025,0.5,0.975)),
+    quantile(mcmc.df$'px[10]',c(0.025,0.5,0.975)))
+  
+  ymin=min(preds[,1]);ymax=max(preds[,3])
+  plot(mosq$time,mos[,1], type="l", col=8, ylim=c(ymin, ymax),main="Mosquito Abundance", xlab="Year", ylab="Abundance")
+  legend("bottomleft", legend = c("PI", "CI", "mean"), lwd = 3, lty = c(2,2,1), col=c(3,2,2),box.lwd = 0,box.col = "white",bg = "white")
+  lines(mosq$time,mos[,2], col=8)
+  lines(mosq$time,mos[,3], col=8)
+  lines(mosq$time,mos[,4], col=8)
+  lines(mosq$time,mos[,5], col=8)
+  lines(mosq$time,quants[,1],lty=2, col=2, lwd=3)
+  lines(mosq$time,quants[,2],col=2, lwd=3)
+  lines(mosq$time,quants[,3],lty=2,col=2, lwd=3)
+  lines(mosq$time,preds[,1],lty=2, col=3, lwd=3)
+  lines(mosq$time,preds[,3],lty=2, col=3, lwd=3)
+}
+cipi(bmcmc2)
+
+```
+
+```{r}
+bmcmc2.df <- as.data.frame(as.matrix(bmcmc2))
+mean(bmcmc2.df$tau.t)/(mean(bmcmc2.df$sigma) + mean(bmcmc2.df$tau.t))
+```
+We can calculate the percentage of the variance in the mosquito densities that is explained by the year effects by dividing the mean variance of year effects by the total variance of the year effects and residuals. 
+This gives us .63 so we can say that 63% of the variance in the mosquito densities  is explained by the year effects.
+
+
+# Mixed Effects
+```{r,echo=FALSE}
+bmcmc2.df <- as.data.frame(as.matrix(bmcmc2))
+
+alpha.t <- rowMeans(rbind(
+  bmcmc2.df$'alpha.t[1]',
+  bmcmc2.df$'alpha.t[2]',
+  bmcmc2.df$'alpha.t[3]',
+  bmcmc2.df$'alpha.t[4]',
+  bmcmc2.df$'alpha.t[5]',
+  bmcmc2.df$'alpha.t[6]',
+  bmcmc2.df$'alpha.t[7]',
+  bmcmc2.df$'alpha.t[8]',
+  bmcmc2.df$'alpha.t[9]',
+  bmcmc2.df$'alpha.t[10]'
+))
+
+met <- read.csv("data//met.csv")
+
+time <- 1995:2004
+idx <- which(met$year == time)
+
+par(mar=c(5, 4, 4, 6) + 0.075)
+
+plot(time,alpha.t, type="o",lwd=2); par(new=TRUE)
+plot(time, met$precip[idx], type="o", axes = FALSE, bty = "n", xlab = "", ylab = "",col=2)
+mtext("precipitation (mm/year)", side=4, line=3)
+axis(side=4, at = pretty(range(met$precip[idx])))
+
+plot(time,alpha.t, type="o",lwd=2); par(new=TRUE)
+plot(time, met$MAT[idx], type="o", axes = FALSE, bty = "n", xlab = "", ylab = "",col=3)
+mtext("mean annual temperature (°C)", side=4, line=3)
+axis(side=4, at = pretty(range(met$MAT[idx])))
+
+plot(time,alpha.t, type="o",lwd=2); par(new=TRUE)
+plot(time, met$RH[idx], type="o", axes = FALSE, bty = "n", xlab = "", ylab = "",col=4)
+mtext("relative humidity (%)", side=4, line=3)
+axis(side=4, at = pretty(range(met$RH[idx])))
+
+```
+
+Clearly precipitation is the first variable worth exploring. Precipitation and alpha.t almost perfectly line up over time. With more time I would experiment with looking at mean annual temperature, but I doubt that it would explain much (if any) of the variance in mosquito densities. 
+
+```{r,eval=FALSE}
+model{
+  for(i in 1:2){beta[i]~dnorm(0,.001)}       ## prior mean
+  sigma ~ dgamma(0.001,0.001)   ## prior residual precision
+  tau.t ~ dgamma(0.001,0.001)   ## prior year-effect precision
+  
+  for(t in 1:nt){           ## loop over years
+    alpha.t[t] ~ dnorm(0,tau.t)     ## random year effect
+    Ex[t] <- beta[1] + beta[2]*precip[t] + alpha.t[t]        ## process model 
+    for(i in 1:nrep){           ## loop over reps
+      
+      x[t,i] ~ dnorm(Ex[t],sigma) ## data model
+    }
+    px[t] ~ dnorm(Ex[t],sigma)  ## predictive interval
+  }
+}
+```
+```{r,echo=FALSE}
+data = list(x=mos,precip=met$precip,nt=10,nrep=5)
+init.cond1 <- list()
+init.cond1[[1]] = list(beta=c(6,0))
+init.cond1[[2]] = list(beta=c(5,0))
+init.cond1[[3]] = list(beta=c(4,0))
+
+init = NULL
+
+FitNorm = "
+model{
+for(i in 1:2){beta[i]~dnorm(0,.001)}       ## prior mean
+siginv ~ dgamma(0.001,0.001)   ## prior residual precision
+tauinv ~ dgamma(0.001,0.001)   ## prior year-effect precision
+sigma <- 1/siginv
+tau.t <- 1/tauinv
+
+for(t in 1:nt){           ## loop over years
+alpha.t[t] ~ dnorm(0,tauinv)     ## random year effect
+Ex[t] <- beta[1] + beta[2]*precip[t] + alpha.t[t]        ## process model 
+for(i in 1:nrep){           ## loop over reps
+
+x[t,i] ~ dnorm(Ex[t],siginv) ## data model
+}
+px[t] ~ dnorm(Ex[t],siginv)  ## predictive interval
+}
+}
+"
+j.model   <- jags.model (file = textConnection(FitNorm),
+                         data = data,
+                         inits = init.cond1,
+                         n.chains = 3)
+b1   <- coda.samples (model = j.model,
+                      variable.names = c("Ex","px","sigma","tau.t","alpha.t","beta"),
+                      n.iter = 750000,
+                      burnin=0,
+                      thin=150)
+bmcmc3 = b1
+# autocorr.plot(bmcmc1)
+# cumuplot(bmcmc1)
+# gelman.plot(bmcmc1) 
+# plot(bmcmc1)  
+# summary(bmcmc3) 
+cipi(bmcmc3)
+
+dic3 <- dic.samples(j.model, n.iter=750000, thin=150, "pD")
+
+legend("bottomleft", legend = c("PI", "CI", "mean"), lwd = 3, lty = c(2,2,1), col=c(3,2,2),box.lwd = 0,box.col = "white",bg = "white")
+
+```
+
+```{r,echo=FALSE}
+dic.vals <- function(dic){
+    deviance <- sum(sapply(dic$deviance,mean))
+    N <- length(dic$penalty[[1]])
+    psum <- rep(0, N)
+    for (i in 1:length(dic$penalty)) {
+        psum <- psum + dic$penalty[[i]]
+    }
+    return(list(dev = deviance, pen.dev = deviance + mean(psum)))
+}
+
+dic.table <- rbind(
+  c(dic.vals(dic1)[[1]],dic.vals(dic1)[[2]]),
+  c(dic.vals(dic2)[[1]],dic.vals(dic2)[[2]]),
+  c(dic.vals(dic3)[[1]],dic.vals(dic3)[[2]])
+  )
+colnames(dic.table) <- c("Mean deviance", "Penalized deviance")
+rownames(dic.table) <- c("Model 1 ","Model 2 ","Model 3 ")
+
+m1 <- as.data.frame(as.matrix(bmcmc1))
+m2 <- as.data.frame(as.matrix(bmcmc2))
+m3 <- as.data.frame(as.matrix(bmcmc3))
+
+params.table <- 
+  rbind(
+    c(mean(m1$mu),quantile(m1$mu,c(.025,.975)), mean(m1$sigma),quantile(m1$sigma,c(.025,.975)), NA, NA, NA), 
+    c(mean(m2$mu),quantile(m2$mu,c(.025,.975)), mean(m2$sigma),quantile(m2$sigma,c(.025,.975)), mean(m2$tau.t),quantile(m2$tau.t,c(.025,.975))), 
+    c(NA,NA,NA, mean(m3$sigma),quantile(m3$sigma,c(.025,.975)), mean(m3$tau.t),quantile(m3$tau.t,c(.025,.975)))
+    )
+colnames(params.table) <- c("mu","2.5%","97.5%","sigma","2.5%","97.5%","tau","2.5%","97.5%")
+rownames(params.table) <- c("Model 1 ","Model 2 ","Model 3 ")
+
+beta.table <- c(mean(m3$'beta[1]'),quantile(m3$'beta[1]',c(.025,.975)),mean(m3$'beta[2]'),quantile(m3$'beta[2]',c(.025,.975)))
+names(beta.table) <- c("beta1","2.5%","97.5%","beta2","2.5%","97.5%")
+
+
+
+
+```
+
+DIC values for all 3 models
+```{r,echo=FALSE}
+dic.table
+```
+The model with the lowest DIC score "wins" - in other words, according to this model selection method, model 3 is the best model of the three. 
+
+Summary table with parameter means and CI for all 3 models
+```{r,echo=FALSE}
+params.table
+```
+
+Additional parameters only in Model 3
+```{r,echo=FALSE}
+beta.table
+```

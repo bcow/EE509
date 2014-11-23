@@ -1,0 +1,331 @@
+---
+title: "Exercise_07_BC"
+author: "Betsy Cowdery"
+date: "October 26, 2014"
+output: html_document
+---
+
+# Task 1
+
+#### Plot growth vs light
+```{r, echo=FALSE}
+load("data/Lab7.RData")
+library(mvtnorm)
+library(coda) 
+```
+
+#### Determine sensible initial conditions for the process model and add a plot of this curve to the data plot.
+```{r, echo=FALSE}
+par(mfrow = c(1,1))
+Mic.Men <- function(beta,L,theta){
+  mu <- beta[1]+beta[2]*(L/(theta+L))
+  }
+
+theta=1
+sg=1000
+beta=c(5,100)
+l = seq(range(L)[1],range(L)[2],length=100)
+
+plot(L,grow, main="Growth vs Light")
+lines(l,Mic.Men(beta,l,theta),col=2)
+
+```
+
+```{r}
+## jump function
+dtnorm <- function(x,mu,sd){
+  y = dnorm(x,mu,sd,log=TRUE)-log(pnorm(1,mu,sd)-pnorm(0,mu,sd))
+  y[x<0 | x > 1] = -Inf
+  return(y)
+  }
+# xseq = seq(-0.5,1,length=100)
+# plot(xseq,exp(dtnorm(xseq,0.25,0.3)),type='l', main = "Jump distribution")
+# lines(xseq,dnorm(xseq,0.25,0.3),col=2)
+
+rtnorm <- function(n,mu,sd){
+  x <- rnorm(n,mu,sd)
+  sel <- which(x < 0 | x > 1)
+  while(length(sel)> 0){
+    x[sel] <- rnorm(length(sel),mu,sd)
+    sel <- which(x < 0 | x > 1)
+    }
+  return(x)
+  }
+
+```
+
+```{r, echo=FALSE}
+gibbs_loop <- function(ngibbs, plot,theta,sg,beta,JumpSD){
+  
+  b0 = beta[1]
+  b1 = beta[2]
+  
+  beta <- matrix(c(b0,b1),2,1)
+  
+  #### specify priors
+  bprior <- as.vector(c(0,0))
+  vinvert <- solve(diag(1000,2))
+  s1 <- 0.1
+  s2 <- 0.1
+  
+  ### beta prior for theta
+  a1 = 1.91
+  a2 = 10.17
+  
+  Vb <- vinvert %*% bprior
+  
+  #### storage for MCMC
+  bgibbs <- matrix(0.0,nrow=ngibbs,ncol=2) 	## storage for beta
+  sgibbs <- numeric(ngibbs)			## storage for sigma2
+  tgibbs <- rep(theta,ngibbs)   ## storage for theta
+  
+  #### initial conditions
+  sg <- 50
+  sinv = 1/sg
+  n <- length(L)
+  z <- L/(L+theta)
+  X <- cbind(rep(1,n),z)
+  
+  Y <- matrix(rnorm(n,X%*%beta,sqrt(sg)),n,1)
+  l = seq(range(L)[1],range(L)[2],length=100)
+  
+  if(plot){
+    plot(L,Y)
+    lines(l,Mic.Men(beta,l,theta),col="red")
+    points(L, grow, col="blue")
+    }
+  
+  #### gibbs loop
+  for(g in 1:ngibbs){    
+    
+    ## sample regression parameters
+    bigV    <- solve(sinv*crossprod(X) + vinvert)
+    littlev <- sinv*crossprod(X,grow) + Vb
+    b <- t(rmvnorm(1,bigV %*% littlev,bigV))
+    
+    ## sample variance
+    u1 <- s1 + n/2
+    u2 <- s2 + 0.5*crossprod(grow-X%*%b)
+    sinv <- rgamma(1,u1,u2)
+    sg <- 1/sinv
+    
+    ##theta
+    tnew <- rtnorm(1,theta,JumpSD)        ##propose new theta
+    znew <- L/(L+tnew)                    ## calculate new z
+    Xnew <- cbind(rep(1,n),znew)              ## calculate new X
+    
+    anum <- dmvnorm(grow,Xnew%*%b,diag(sg,n),log=TRUE) +  ##likelihood
+      dbeta(tnew,a1,a2,log=TRUE)          ##prior
+    jnum <- dtnorm(tnew,theta,JumpSD)             ##jump
+    aden <- dmvnorm(grow,X%*%b,diag(sg,n),log=TRUE) + ##likelihood
+      dbeta(theta,a1,a2,log=TRUE)           ##prior
+    jden <- dtnorm(theta,tnew,JumpSD)             ##jump
+    a <- exp((anum-jnum)-(aden-jden))         ## acceptance criteria
+    if(a > runif(1)){                 ## accept with probability a
+      theta <- tnew                       ## update theta if step accepted
+      X <- Xnew                       ## update X if step accepted
+      }
+    
+    ## storage
+    bgibbs[g,] <- b  ## store the current value of beta vector
+    sgibbs[g]  <- sg  ## store the current value of the variance
+    tgibbs[g] <- theta  ## store the current value of  theta
+    
+    # if(g %%100 == 0) print(g)  ##show how many steps have been performed
+    }
+  
+  out <- list(bgibbs=bgibbs,sgibbs=sgibbs, tgibbs=tgibbs,X=X,Y=Y)
+  return(out)
+  }
+
+```
+
+#### Testing JumpSD values
+```{r, echo=FALSE}
+
+ngibbs <- 1000
+theta=1
+sg=1000
+beta=c(5,100)
+
+beg = 1 
+thin = 1
+
+for(j in seq(.01,.05,by=.01)){
+  JumpSD <- j     
+  out <- gibbs_loop(ngibbs,plot=F,theta,sg,beta,JumpSD) 
+  mcmct <- mcmc(out$tgibbs[seq(from=beg,to=ngibbs,by=thin)]) 
+  print(sprintf("For jump sd = %.2f, acceptance rate = %.4f", JumpSD,1-rejectionRate(mcmct) ))
+  }
+```
+
+#### Determine burnin and thinning
+
+```{r,echo=FALSE}
+
+ngibbs <- 5000
+theta=1
+sg=1000
+beta=c(5,100)
+JumpSD = .02
+beg = 500 
+thin = 50
+
+out <- gibbs_loop(ngibbs,plot=F,theta,sg,beta,JumpSD) 
+mcmc <- mcmc(cbind(
+  out$bgibbs[seq(from=beg,to=ngibbs,by=thin),],
+  out$sgibbs[seq(from=beg,to=ngibbs,by=thin)],
+  out$tgibbs[seq(from=beg,to=ngibbs,by=thin)]
+  )) 
+
+print("var 1 = b0, var2 = b1, var3 = variance, v4 = theta")
+plot(mcmc) ## mcmc history and density plot
+
+autocorr.plot(mcmc)    ## autocorrelation
+cumuplot(mcmc)    ## quantile plot
+
+print("var 1 = b0, var2 = b1, var3 = variance, v4 = theta")
+print(1-rejectionRate(mcmc))	## acceptance rate
+print(summary(mcmc))		## summary table
+sum_mcmc <- summary(mcmc)
+
+```
+
+#### do the real calculation
+```{r}
+
+theta=1
+sg=1000
+beta=c(5,100)
+JumpSD = .02
+beg = 500
+thin = 50
+ngibbs <- 5000*thin + beg
+
+out <- gibbs_loop(ngibbs,plot=F,theta,sg,beta,JumpSD) 
+
+mcmc <- mcmc(cbind(
+  out$bgibbs[seq(from=beg,to=ngibbs,by=thin),],
+  out$sgibbs[seq(from=beg,to=ngibbs,by=thin)],
+  out$tgibbs[seq(from=beg,to=ngibbs,by=thin)]
+  )) 
+
+print("var 1 = b0, var2 = b1, var3 = variance, v4 = theta")
+plot(mcmc) ## mcmc history and density plot
+
+autocorr.plot(mcmc)    ## autocorrelation
+cumuplot(mcmc)    ## quantile plot
+
+print("var 1 = b0, var2 = b1, var3 = variance, v4 = theta")
+print(1-rejectionRate(mcmc))  ## acceptance rate
+print(summary(mcmc))		## summary table
+sum_mcmc <- summary(mcmc)
+
+par(mfrow = c(1,1))
+## credible and prediction intervals
+xpred <- seq(0,1,length=30)
+npred <- length(xpred)
+ypred <- matrix(NA,nrow=ngibbs,ncol=npred)
+ycred <- matrix(NA,nrow=ngibbs,ncol=npred)
+
+for(g in 1:ngibbs){
+  Ey <- out$bgibbs[g,1] + out$bgibbs[g,2] * xpred/(xpred + out$tgibbs[g])
+  ycred[g,] <- Ey
+  ypred[g,] <- rnorm(npred,Ey,sqrt(out$sgibbs[g]))
+}
+ci <- apply(ycred,2,quantile,c(0.025,0.5,0.975))
+pi <- apply(ypred,2,quantile,c(0.025,0.975))
+
+plot(L,grow)
+lines(xpred,ci[2,],col=3,lwd=2)  ## median model
+lines(xpred,ci[1,],col=3,lty=2) ## model CI
+lines(xpred,ci[3,],col=3,lty=2)
+lines(xpred,pi[1,],col=4,lty=2) ## model PI
+lines(xpred,pi[2,],col=4,lty=2)
+
+```
+#### Regression Model in BUGS
+
+```{r}
+library(rjags)
+
+n <- length(L)
+data = list(grow=grow,L=L,n=n)
+init = NULL
+
+FitNorm = "
+model{
+  beta[1] ~ dnorm(0,0.001)    ## priors
+  beta[2] ~ dnorm(0,0.001)
+  prec    ~ dgamma(0.1,0.1)
+  sigma   <- 1/prec
+
+  for(i in 1:n){
+    Eg[i] <- beta[1] + beta[2]*L[i]     ## process model
+    grow[i] ~ dnorm(Eg[i],prec)     ## data model
+    Pg[i]     ~ dnorm(Eg[i],prec)       ## prediction
+  }
+}"
+j.model   <- jags.model (file = textConnection(FitNorm),
+                         data = data,
+                         inits = init,
+                         n.chains = 3)
+
+update(j.model,1000)
+j.out   <- coda.samples (model = j.model,
+                      variable.names = c("beta","sigma"),
+                      n.iter = 10000
+                      ,thin = 2
+                      )
+reg.j <- j.out
+
+autocorr.plot(reg.j)
+cumuplot(reg.j)
+gelman.plot(reg.j) 
+plot(reg.j) 
+summary(reg.j)
+
+```
+
+#### Michaelis-Menton in BUGS
+
+```{r}
+
+
+n <- length(L)
+data = list(grow=grow,L=L,n=n)
+init = NULL
+
+FitNorm = "
+model{
+beta[1] ~ dnorm(0,0.001)    ## priors
+beta[2] ~ dnorm(0,0.001)
+prec    ~ dgamma(0.1,0.1)
+sigma   <- 1/prec
+theta   ~ dbeta(1,1)
+    for(i in 1:n){
+    Eg[i] <- beta[1] + beta[2]*L[i]/(theta+L[i])    ## process model
+    grow[i] ~ dnorm(Eg[i],prec)     ## data model
+    Pg[i]     ~ dnorm(Eg[i],prec)       ## prediction
+     }
+}"
+j.model   <- jags.model (file = textConnection(FitNorm),
+                         data = data,
+                         inits = init,
+                         n.chains = 3)
+
+update(j.model,n.iter=2000)
+j.out   <- coda.samples (model = j.model,
+                      variable.names = c("beta","sigma","theta"),
+                      n.iter = 200000,
+                      thin = 40
+                      )
+mm.j <- j.out  
+
+autocorr.plot(mm.j)
+cumuplot(mm.j)
+gelman.plot(mm.j) 
+plot(mm.j) 
+summary(mm.j)
+
+```

@@ -7,28 +7,38 @@ output: html_document
 
 # Case study 1: Survival Analysis
 
-#### 1) Include code to make a plot of the exponential PDF (with the MLE parameter estimate) on top of the histogram of the data.
+#### Include code to make a plot of the exponential PDF (with the MLE parameter estimate) on top of the histogram of the data.
 
 ```{r}
-## vector of survival times (days)
 dat <- c(1,9,9,5,27,9,29,1,11,3,3,11,13,6,11,2,4,1,37,10)
-p = 1/mean(dat)
-x <- 1:40
-## some basic exploratory analysis
-hist(dat,freq=FALSE)
-lines(p*exp(-p*x), col = 2)
+n <- length(dat)
+
+elik <- function(rho){
+  -n*log(rho) + rho*sum(dat)
+}
+
+fit_exp <- optimize(elik,lower=0.01,upper=0.9,maximum=F)
+rho_mle <- fit_exp$minimum
+rho_case1 <- rho_mle
+
+x <- 1:37
+hist(dat,freq=FALSE,nclass = max(dat), xlab="Survival Times", main="Histogram of survival times")
+lines(x,dexp(x,rate=rho_mle), col=2, lwd=2)
 ```
 
-## Case Study 2: Change in Fire Risk With Time
+# Case Study 2: Change in Fire Risk With Time
 
 Fire return interval are frequently analyzed using a Weibull distribution:
 
 $$f(x \vert c, \lambda) = \left({{c}\over{\lambda}}\right)\left( {x \over \lambda} \right)^{c-1} exp\left( -\left( {x\over \lambda} \right)^c \right)$$
 
-```{r}
+#### Does increasing the “shape” parameter cause fire risk to increase or decrease with age?
+
+```{r,echo=FALSE}
 age = 0:160
-size <- seq(.5,3,.5)
-plot(age,dweibull(age,.1,50),type='l',ylab="density",ylim=c(0,0.025)) 
+size <- seq(.5,3.5,.5)
+
+plot(age,dweibull(age,.1,50),type='l',ylab="fire risk",ylim=c(0,0.03)) 
 for(i in 1:length(size)){
 lines(age,dweibull(age,size[i],50),col=i+1) 
 }
@@ -36,135 +46,269 @@ legend("topright", inset = .05, title = "Shape", legend = c(.1,size), lty = 1, c
 
 ```
 
-#### 2) Does increasing the “shape” parameter cause fire risk to increase or decrease with age?
+As the "shape" variable increases, we can see the shape of the PDF change switch from a curve resembling an exponential distribution to one that looks more and more normal around the value 50 (the "scale" value). With this shift, we can see that the greatest change of risk is moving further away from zero. Depending on the size of the tail of the curve, there may be a non-zero risk up to and past 150 years, but as the distriibution settles around 50, it narrows and the risk of fire in very late years (100+) decreases again. 
 
-From the plot above, it appears that increasing "size" increases the probability of fire with age. 
+#### Plot the CDF of these 3 distributions. What is significant about the scale parameter? What is the analytical solution for the CDF at this point? Add these lines to your CDF plot.
 
-#### 3) Extra Credit: Plot the CDF of these 3 distributions. What is significant about the scale parameter? What is the analytical solution for the CDF at this point? Add these lines to your CDF plot.
+```{r,echo=FALSE}
+age = 0:100
+shape <- c(1,2)
 
-```{r}
-age = 0:160
-size <- seq(.5,3,.5)
-plot(age,pweibull(age,.1,50),type='l',ylim = c(0,1),ylab="density") 
-for(i in 1:length(size)){
-lines(age,pweibull(age,size[i],50),col=i+1) 
-}
-legend("bottomright", inset = .05, title = "Shape", legend = c(.1,size), lty = 1, col=1:(length(size)+1))
+par(mfrow = c(1,2))
+
+plot(age,pweibull(age,.5,20),type='l',ylim = c(0,1),ylab="fire risk") 
+for(i in 1:length(shape)){
+  lines(age,pweibull(age,shape[i],20),col=i+1) 
+  }
+legend("bottomright", inset = .05, title = "Shape", legend = c(.5,shape), lty = 1, col=1:(length(shape)+1))
+title("Scale = 20")
+abline(v=20,lty=2)
+
+
+plot(age,pweibull(age,.5,70),type='l',ylim = c(0,1),ylab="fire risk") 
+for(i in 1:length(shape)){
+  lines(age,pweibull(age,shape[i],70),col=i+1) 
+  }
+legend("topleft", inset = .05, title = "Shape", legend = c(.5,shape), lty = 1, col=1:(length(shape)+1))
+title("Scale = 70")
+abline(v=70,lty=2)
+
 ```
 
-```{r}
+Once again, we can see that the value of the scale parameter
+
+### Fire Data
+
+
+```{r,echo=FALSE}
 fireintervals <- read.table("data/firescar.txt",header=TRUE)
 firedata <- rep(fireintervals[,1],fireintervals[,2])
 hist(firedata,nclass=max(firedata),xlab="Years",main="Fire Return Interval")
 summary(firedata)
 ```
 
+------
+#### Since the exponential is a special case of the Weibull, use the code from the first case study to solve for the exponential MLE (rho_mle) for the fire scar data
+
+
+Negative log likelihood function for the Exponential model:
 ```{r}
-## define Weibull negative log likelihood
+
+elik <- function(rho){
+  -n*log(rho) + rho*sum(dat)
+}
+```
+
+Optimize to get rho_mle:
+```{r}
+dat <- firedata
+n <- length(dat)
+
+fit_exp <- optimize(elik,lower=0.01,upper=0.9,maximum=F)
+rho_mle <- fit_exp$minimum
+fit_exp
+```
+
+
+Negative log likelihood function for the Weibull model:
+```{r}
 wlik <- function(param){
- -sum(dweibull(firedata, param[1], param[2], log = TRUE))
+ -sum(dweibull(dat, param[1], param[2], log = TRUE))
+}
+```
+
+Optimize to get "shape" and "scale":
+```{r}
+param0 <- c(1.0,1/rho_mle)
+dat <- firedata
+out <- optim(param0,wlik,lower=c(0.01,0.01), upper=c(100,100),method="L-BFGS-B")
+out
+```
+
+```{r,echo=FALSE}
+age = 0:160
+hist(firedata,probability=TRUE,nclass=max(firedata),main="Histogram of Fire Return Interval compared with PDF")
+lines(age,dweibull(age,out$par[1],out$par[2]),col=2,)
+```
+
+```{r,echo=FALSE}
+nstep <- 40  
+z <- matrix(NA,nrow=nstep,ncol=nstep)  	## matrix to store results
+rp <- seq(0.2,2,length=nstep)				## sequence from 20%-200%
+for(i in 1:nstep){					## loop over the first dimension
+  c <- rp[i]*out$par[1]		#c value
+  for(j in 1:nstep){
+    lambda <- rp[j]*out$par[2]		#lamba values
+    z[i,j] <- wlik(c(c,lambda))
+  }
 }
 
-rho_mle <- 1/mean(firedata)
-param0 <- c(.01,1/rho_mle)
-wlik(param0)
-fit <- optim(param0,wlik,lower=c(0.01,0.01), upper=c(100,100),method="L-BFGS-B")
-
+contour(rp*out$par[1],rp*out$par[2],z,levels=c(347,348,349,350,360,370,380),xlab="C",ylab="Lambda")
+title("2D Likelihood Surface")
+## add the  MLE's
+abline(v=out$par[1],lty=2)
+abline(h=out$par[2],lty=2)
+points(1,1/rho_mle,col=2,lwd=2)		## MLE for exponential special case
+points(out$par[1],out$par[2],col=3,lwd=2)  
+legend("bottomright", legend = c("MLE using Exp. special case","MLE using Weibull"), pch = 1, col=c(2,3))
 ```
-
-```{r}
-# p1 <- seq(0.01,.6,length=200)
-# p2 <- seq(0.01,.99,length=200)
-# XY <- expand.grid(X=p1,Y=p1)
-# contour(XY$X,XY$Y,Z)
-# 
-# 
-# Z <- mapply(wlik,XY$X,XY$Y)
-# 
-# require(reshape2)
-# require(ggplot2)
-# df <- data.frame(XY$X,XY$Y,Z)
-# colnames(df)<-c("x","y","z")
-# 
-# plot <- ggplot(df, aes(x,y,z=z))
-# plot + stat_contour(bins=500,aes(colour = ..level..))
-# 
-# 
-# contour(rp*out$par[1],rp*out$par[2],z,levels=c(350,360,370,380)
-#     ,xlab="C",ylab="Lambda")
-# ## add the  MLE's
-# abline(v=out$par[1],lty=2)
-# abline(h=out$par[2],lty=2)
-# points(1,1/rho_mle,col=2)	
-
-```
-
-------
-#### 4) Since the exponential is a special case of the Weibull, use the code from the first case study to solve for the exponential MLE (rho_mle) for the fire scar data
 
 
 ## Case study 3: Binomial/Exponential Mortality
 
-```{r}
+```{r,echo=FALSE}
 surv = c(0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0)
 n = length(surv)
 y = sum(surv)
 t <- 20 
+plot(as.factor(surv),main="Census of Population at T=20",xaxt="n")
+axis(1,at = c(1,2),labels = c("dead","alive"))
 ```
  
+$$L = Binom(y \vert N, \theta) \propto \theta^y \left( 1-\theta \right)^{N-y}$$
+
+$$\theta_{ML}=\frac{y}{N}$$
+
 $$L = Binom(y \vert N, \rho) \propto e^{-\rho T y} \left( 1-e^{-\rho T} \right)^{N-y}$$
 
+$$\rho_{ML}=\frac{-\ln{y/N}}{T}$$
+
+#### Apply one of the **numerical methods** you used above in order to estimate $\rho$.
+
+Include the following in your answer:
+
+*  R code
+
+*  Numerical estimate of rho
+
+*  Negative log likelihood profile
+
+
+First, calculate analytical solutions:
 ```{r}
-lbinexp <- function(rho){
-  exp(-rho*t*y)*(1-exp(-rho*t)^(n-y))
+theta_ml <- y/n
+rho_ml <- -log(y/n)/t
+```
+
+Likelihood function:
+```{r}
+binexp <- function(rho){
+  exp(-rho*t*y)*(1-exp(-rho*t))^(n-y)
+  }
+```
+
+Negative Log Likelihood functions:
+```{r}
+
+# Binomial
+lbin <- function(theta){
+  -dbinom(y,n,theta,log=T)
 }
+
+# Combined Binomial and Exponential
+lbinexp <- function(rho){
+  rho*t*y - (n-y)*log(1-exp(-rho*t))
+}
+```
+```{r,echo=FALSE}
+options(warn=-1)
+```
+
+```{r}
+rseq <- seq(.01,.99,.01)
+
+fit <- optimize(lbin,lower=.01, upper=.99,maximum=F)
+theta_ml_o <- fit$minimum
+theta_ml
+theta_ml_o
+rseq <- seq(.01,.99,.01)
+plot(rseq,lbin(rseq),ylab ="Negative Log Likelihood",xlab="Mortality Rate",main="Binomial Model")
+lines(rseq,lbin(rseq))
+abline(v=theta_ml, lwd=2, col=4)
+abline(v=theta_ml_o,lty=2,lwd=2, col=6)
+abline(h=lbin(theta_ml_o),lty=2)
+legend(.2,70, legend = c(sprintf("analytical %s: %.6f","θ",theta_ml), sprintf("estimated %s: %.6f","θ",theta_ml_o)) , lty = 1, col = c(4,6),bg="white")
 
 fit <- optimize(lbinexp,lower=.01, upper=.99,maximum=F)
-rho_mle_be <- fit$minimum
+rho_ml_o <- fit$minimum
 rseq <- seq(.01,.99,.01)
-plot(rseq,lbinexp(rseq),main="Log Likelihood",xlab="rho",ylab="blerg")
-lines(rseq,lbinexp(rseq),col=2)
-abline(v=rho_mle_be,lty=2)
-abline(h=lbinexp(rho_mle_be),lty=2)
-
-
-
+plot(rseq,lbinexp(rseq),ylab ="Negative Log Likelihood",xlab="Mortality Rate")
+title("Combined Binomial and
+Exponential Model")
+lines(rseq,lbinexp(rseq))
+abline(v=rho_ml, lwd=2)
+abline(v=rho_ml_o,lty=2,lwd=2, col=6)
+abline(h=lbinexp(rho_ml_o),lty=2)
+legend(.2,60, legend = c(sprintf("analytical %s: %.6f","ρ",rho_ml), sprintf("estimated %s: %.6f","ρ",rho_ml_o)) , lty = 1, col = c(4,6),bg="white")
 ```
+```{r,echo=FALSE}
+rho_case3 <- rho_ml_o
+```
+```{r,echo=FALSE}
+options(warn=0)
+```
+
+
+#### If we wanted to test the assumption that mortality rate was constant in time, which of the two data sets could we use and what model would we fit?
+
+We would need to use the data set from the first example that has many measurements through time. 
+With this data set, we can try fitting a Weibull distribution, the only distribution so far that does not assume $\rho$ to be constant. 
+
+
+```{r,echo=FALSE}
+dat <- c(1,9,9,5,27,9,29,1,11,3,3,11,13,6,11,2,4,1,37,10)
+n <- length(dat)
+
+fit_exp <- optimize(elik,lower=0.01,upper=0.9,maximum=F)
+rho_mle <- fit_exp$minimum
+
+param0 <- c(1.0,1/rho_mle)
+out <- optim(param0,wlik,lower=c(0.01,0.01), upper=c(100,100),method="L-BFGS-B")
+
+age = 1:160
+hist(dat,probability=TRUE,nclass=max(dat),main="Histogram of Fire Return Interval compared with PDF")
+lines(age,dweibull(age,out$par[1],out$par[2]),col=2,)
+
+nstep <- 40  
+z <- matrix(NA,nrow=nstep,ncol=nstep)    ## matrix to store results
+rp <- seq(0.2,2,length=nstep)  			## sequence from 20%-200%
+for(i in 1:nstep){					## loop over the first dimension
+  c <- rp[i]*out$par[1]		#c value
+  for(j in 1:nstep){
+    lambda <- rp[j]*out$par[2]		#lamba values
+    z[i,j] <- wlik(c(c,lambda))
+  }
+}
+
+contour(rp*out$par[1],rp*out$par[2],z,xlab="C",ylab="Lambda",levels = seq(200))
+title("2D Likelihood Surface")
+## add the  MLE's
+abline(v=out$par[1],lty=2)
+abline(h=out$par[2],lty=2)
+points(1,1/rho_mle,col=2,lwd=2)		## MLE for exponential special case
+points(out$par[1],out$par[2],col=3,lwd=2)  
+
+legend("bottomright", legend = c("MLE using Exp. special case","MLE using Weibull"), pch = 1, col=c(2,3), bg="white")
+```
+
+
+
+#### Extra Credit: A plot of the exponential PDF with two curves, one based on the Exponential model from the start of this lab and the second from the Binomial/Exponential fit you just found 
 
 ```{r}
-rseq <- seq(.05,.15,.01)
 dat <- c(1,9,9,5,27,9,29,1,11,3,3,11,13,6,11,2,4,1,37,10)
-rho_mle_e <- 1/mean(dat)
-lkexp2 <- function(rho){
-  -sum(dexp(dat,rho,log=TRUE))
-}
-llk2 <- sapply(rseq,lkexp2)
-par(mar=c(5,4,4,5)+.1)
-plot(rseq,llk2,main="Log Likelihood",xlab="rho",ylab="-log(L)")
-lines(rseq,llk2,col=2)
-abline(v=rho_mle_e,lty=2)
-abline(h=lkexp2(rho_mle_e),lty=2)
+t <- 1:max(dat)
+
+rho_case1
+rho_case3
+
+hist(dat,freq=FALSE,nclass = max(dat), xlab="Survival Times", main="Histogram of survival times")
 par(new=TRUE)
-plot(rseq,lbinexp(rseq),xaxt="n",yaxt="n",xlab="",ylab="")
-lines(rseq,lbinexp(rseq),col=4)
-axis(4)
-mtext("-log(L)",side=4,line=3)
-legend("topright",col=c("red","blue"),lty=1,legend=c("Case 1","Case 3"))
-
-```
-
-Apply one of the **numerical methods** you used above in order to estimate $\rho$.
-
-## Lab Questions
-
-```
-5) Please include the following in your answer:
-*  R code
-*  Numerical estimate of rho
-*  Negative log likelihood profile
-*  Answer the following question:  If we wanted to test the assumption that mortality rate was constant in time, which of the two data sets could we use and what model would we fit?
+plot(t,dexp(t,rate=rho_case1), col="red",type="l",lwd=2,xaxt = "n",yaxt = "n",ylab = "",xlab="")
+par(new=TRUE)
+plot(t,lbinexp(rho_case3), col="blue",type="l",lwd=2,xaxt = "n",yaxt = "n", ylab="",xlab="")
+legend("topright",col=c("red","blue"),lty=1,legend=c("Exponential","Exponenial and Binomial"))
 
 
-6) Extra Credit: A plot of the exponential PDF with two curves, one based on the Exponential model from the start of this lab and the second from the Binomial/Exponential fit you just found 
 ```
 
