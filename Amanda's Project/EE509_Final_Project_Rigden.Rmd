@@ -1,0 +1,434 @@
+---
+title: "Final Project EE509"
+author: "Angela Rigden"
+date: "November 21, 2014"
+output: html_document
+---
+
+The goal of this project is to model the surface conductance $(C_{surf})$ to water vapor transport as a funciton of environmental conditions, similar to the Jarvis-Stewart conductance model (Stewart, 1988). The surface conductance describes the diffusion of water vapor from the soil through the vegetation to the surface layer of the atmospheric boundary layer. The surface conductance, which cannot be directly measured, is the effective limitation of evapotranspiration as water vapor moves from the site of evaporation (i.e. stomata, soil pores) to the air above (Garratt, 1992). Because $C_{surf}$ is not measureable, the $C_{surf}$ model is embedding within a bigger model that predicts latent energy (LE) using an energy balance, Monin-Obhukov similarity theory, and Businger-Dyer stability functions. The model is applied at Ameriflux site(s) where LE and other surface fluxes are measured. 
+
+For the data model, I will assume that the errors are normally distributed with an unknown, constant variance:
+
+$$ LE = E(x,\beta) + \epsilon$$
+$$ \epsilon \sim N(0,\sigma^2) $$
+
+The process model is based on the Jarvis-Stewart conductance model. 
+
+$$C_{surf} = {C_{max} \times\ f(T_a) \times\ f(R) \times\ f(VPD) \times\ f(SMC)}$$
+
+In this model, $C_{max}$ is the maximum surface conductance. It is an unknown and is fit with the MCMC. The four functions following $C_{max}$ are the constraining functions for air temperature $(T_a)$, incoming solar radiation $(R)$, vapor pressure deficit $(VPD)$, and soil moisture content $(SMC)$. These functions are always between zero and unity. The model is structured such that when the constraining functions multiply to unity, the conductance is at its maximum. Each environmental variable independently can exert stress on the system and lower the maximum surface conduce (e.g. if the soil is very dry, $f(SMC)$ << 1 and will significantly lower the conductance from the maximum). The constraining functions are modeled as follows:
+
+$$f(T_a) = \frac {1}{(1 + exp(-\beta_1 \times\ T_a))}$$
+$$f(R) = \frac {R}{R + \beta_2}$$
+$$f(VPD) = \frac {1}{1 + \beta_3 \times\ VPD}$$
+$$f(SWC) = 1 - exp(- \beta_3 \times\ SMC)$$
+
+The constraining function equations are structured to be between 0 and 1 when \beta is greater than zero.   
+
+The code below is structured as follows:    
+1. Format Data: formats Ameriflux data if not already formatted.    
+2. Fit MCMC: fits MCMC to surface conductance model.    
+3. Results
+
+
+```{r}
+# Source functions 
+source("Bisection_ts.R")
+
+# load libraries
+library(coda)
+library(mvtnorm)
+```
+
+##1. Format Data  
+If you want to add an Ameriflux site, there are three steps:  
+
+Step 1.  Drag the "Level 2 data" into a new folder named with "site name"
+```{r}
+user_me = FALSE # Sys.info()['user'] == 'angelarigden'
+
+if (user_me){
+  site_names = dir("Level_2_Ameriflux") # Get the site names
+  print("Hi Angela")
+  }else{
+    site_names=c("Duke_Forest_Hardwoods","Vaira_Ranch")
+    }
+
+number_sites = length(site_names) # Determine Number of sites
+```
+
+Step 2.  Specify biophysical parameters for that station below. KB is a parameter used to calculate roughness height, z_veg is the vegetation height (m), and z_m is the measurment height.   
+
+````{r}
+ameriflux_meta = data.frame(site = site_names, KB = c(8,2),
+                            z_veg = c(25,0.5), z_m = c(42,2.5))
+```
+
+Step 3.  Add station file to "exist" statements below...   
+e.g. file.exists(paste("Level_2_Ameriflux_Formatted/",site_names[n],".Rda",sep="")
+
+Format the raw data (if it is not already). The raw data are .nc files downloaded from the Level-2 with gaps Ameriflux repository. 
+```{r}
+if(user_me){
+  if (file.exists(paste("Level_2_Ameriflux_Formatted/",site_names[1],".Rda",sep="")) & 
+        file.exists(paste("Level_2_Ameriflux_Formatted/",site_names[2],".Rda",sep=""))){
+    print("Ameriflux .nc files already formatted") # Already formatted
+    }else{
+      source("Format_Data.R") # Format .nc data
+      } # End if loop to format .nc data  
+  }
+```
+
+Extract usable data from formatted data (if it is not already).
+```{r}
+if(user_me){
+  if (file.exists(paste("Level_2_Ameriflux_Formatted_Data_Extracted/",site_names[1],".Rda",sep="")) & 
+        file.exists(paste("Level_2_Ameriflux_Formatted_Data_Extracted/",site_names[2],".Rda",sep=""))){
+    print("The data is already extracted from the formatted data") # Data already extracted
+    }else{
+      source("Extract_Usable_Days.R") # Extract usable data
+      } # End if loop to extract data
+  }
+```
+
+##2. Fit MCMC   
+The code below has an index "ST", which referes to which Ameriflux site to run. For now, I am only modeling LE at one Ameriflux station, [Duke Forest Hardwoods][1], which is ST = 1.
+
+```{r}
+ST = 1 # Duke
+```
+
+###2A. Load data   
+```{r}
+if(user_me){
+  load(paste("Level_2_Ameriflux_Formatted_Data_Extracted/",site_names[ST],".Rda",sep=""))
+  }else{
+    load(paste(site_names[ST],".Rda",sep=""))
+    }
+# Extract meta data for that station 
+ameriflux_meta_st = ameriflux_meta[ST,]
+```
+
+Extract Jarvis-Stewart environmental conditions data from data frame loaded above (ameriflux_df) and convert to correct unit:
+```{r}
+environmental_conditions = subset(ameriflux_df,select=c(ta,rg,vpd,swc1))
+environmental_conditions$ta = environmental_conditions$ta - 273.15 # Convert to degrees-C
+environmental_conditions$swc1 = environmental_conditions$swc1/100 # Convert from % to fraction
+# vpd is in kPa
+# rg is in W/m^2
+
+# Sample size and data
+n <- nrow(environmental_conditions) ## define the sample size
+x <- as.matrix(cbind(environmental_conditions$ta, # air temp
+                     environmental_conditions$rg, # incoming rad
+                     environmental_conditions$vpd, # vpd 
+                     environmental_conditions$swc1)) # swc 
+
+# Extract observed data
+LEobs = as.matrix(ameriflux_df$le) # latent energy
+```
+
+###2B. Specify parameters for the priors
+There are five parameters in the process model and a model variance, all of which need priors. In the process model, one of the parameters is the maximum surface conductance ($C_{max}$) and the other four are the parameters in the constraining functions ($beta_1, beta_2, beta_3, beta_4$). Because the conductance can never be negative and the constraining functions need to be between 0 and 1, all of these parameters need to be positive. Because they need to be positive, I am modeleing the parameters with truncated normals, defined below.
+
+```{r}
+## Keep logs in function because using "dtnorm" in acceptance rate, which uses logged priors
+dtnorm <- function(x,mu,sd){
+  y = dnorm(x,mu,sd,log=TRUE)-log(pnorm(Inf,mu,sd)-pnorm(0,mu,sd))
+  y[x<0] = -Inf
+  return(y)
+  }
+
+rtnorm <- function(n,mu,sd){
+  x <- rnorm(n,mu,sd)
+  sel <- which(x < 0)
+  while(length(sel)> 0){
+    x[sel] <- rnorm(length(sel),mu,sd)
+    sel <- which(x < 0)
+    }
+  return(x)
+  }
+```
+
+I set the priors based on figures in Jones (2014). The constraining functions (with prior means inserted), look like this:
+```{r}
+bprior <- c(0.1,100,4,10) 
+Vb = c(.1,100,4,10)
+
+par(mfrow=c(2,2))
+temp_seq = seq(10,45,by=0.01)
+plot(temp_seq,1-exp(-bprior[1]*temp_seq),xlab = "Temperature (degreeC)", ylab = "Relative Csurf") 
+
+rad_seq = 1:1000
+plot(rad_seq,rad_seq/(rad_seq+bprior[2]),xlab="Raditation (W/m^2)", ylab = "Relative Csurf") 
+
+vpd_seq = seq(0,4,by=0.01)
+plot(vpd_seq,1/(1+bprior[3]*vpd_seq),xlab="VPD (kPa)", ylab = "Relative Csurf")   
+
+smc_seq = seq(0,1,by=0.001)
+plot(smc_seq,1-exp(-bprior[4]*smc_seq),xlab="SMC (fraction)", ylab = "Relative Csurf")   
+
+## Plot up priors to double check they are what you want
+#     hist(rtnorm(100000,cm_0,cm_sd))
+#     hist(rtnorm(100000,bprior[1],Vb[1]))
+#     hist(rtnorm(100000,bprior[2],Vb[2]))
+#     hist(rtnorm(100000,bprior[3],Vb[3]))
+#     hist(rtnorm(100000,bprior[4],Vb[4]))
+``` 
+
+The maximum surface conductance is based on data presented in Jones (2014).
+```{r}
+# Csurf_max, (aka "cm").... Priors From book "Plants and Microclimate, Jones" (page 136) 
+cm_0 = 0.021 # m/s  (maximum surface conductnace = 3 (mm/s,max stomata conductance) x 7 LAI)
+cm_sd = 0.015 # m/s
+```
+
+The variance is modeled as an IG with uninformative priors, s1 and s2. 
+```{r}
+# IG variance priors 
+s1 <- 0.1
+s2 <- 0.1
+```
+
+###2c. Set up variables to store MCMC
+```{r}
+##storage for MCMC
+ngibbs <- 10000                                     	  ## number of updates
+bgibbs <- matrix(0.0,nrow=ngibbs,ncol=length(bprior)) ## storage for beta
+sgibbs <- numeric(ngibbs)			                        ## storage for sigma2
+cmgibbs <- numeric(ngibbs)  		                      ## storage for cmax
+accept <- numeric(ngibbs)                             ## storage for acceptance rate for debugging purposes
+LEgibbs <-- matrix(0.0,nrow=length(LEobs),ncol=ngibbs) ## storage for modeled LE
+```
+
+###2d. Specify initial conditions
+```{r}
+## initial conditions
+beta <- bprior # Same as prior mean for beta
+cmax <- cm_0 # Same as prior mean for cmax
+
+# x are in order: x = [temp, rad, vpd, swc] 
+f_temp = 1 - exp(-beta[1]*x[,1])
+f_rad = x[,2]/(x[,2] + beta[2])
+f_vpd = 1/(1 + (beta[3]*x[,3]))
+f_smc = 1-exp(-beta[4]*x[,4])
+
+## calculate new CSurf
+# exp(15:-0.25:0)
+CSurf <- cmax*f_temp*f_rad*f_vpd*f_smc
+# r_surf_possible = exp(seq(15,0,by=(-0.25))) # r_surf === 1/Csurf
+LE <- Bisection_ts(ameriflux_df, ameriflux_meta_st, 1/CSurf) 
+# <-- this function takes in R_Surf in (s/m)
+u1 <- s1 + n/2
+u2 <- s2 + 0.5*crossprod(LEobs-LE)
+sinv <- rgamma(1,u1,u2)
+sg <- 1/sinv
+
+# Just to check that the "constrining functions" are actually doing something...
+PLE <- Bisection_ts(ameriflux_df, ameriflux_meta_st, 1/cmax) 
+
+# plot(LE,LEobs,xlab ="Modeled",ylab ="Observed")
+# points(PLE,LEobs,col=3)
+# legend("topright",
+#        legend = c("With constraint fncts","No constraint fncts, LE(cmax)"),
+#        col = c(1,3),
+#        pch = c(1,1))
+# abline(0,1,col=2)
+
+aden <- (sum(dnorm(LEobs,LE,sg,log=TRUE)) +   ##likelihood
+           sum(dtnorm(beta,bprior,Vb)) + dtnorm(cmax,cm_0,cm_sd))	## prior, already in log
+
+```
+
+###2e. Specify jump distribution
+```{r}
+## Note: jump sd should be much smaller than prior SD
+JumpSD_cmax <- 0.008   # Prior on cmax --> cm_sd = 0.015 # m/s
+JumpSD_beta <- c(0.075,75,3,7)    # Prior on betas --> Vb = c(.1,100,4,10)
+```
+
+###2f. MCMC loop
+
+I attached a data file with the results for a run with ngiggs set to 10,000. The loop below skips the MCMC if ngibbs is set to 10,000. If you want to run the loop, set ngibbs to a lower number. The loops is slow so beware. 
+
+```{r}
+save_image_file = paste("Csurf_V4_",ngibbs,"S",sep="")
+
+if(!file.exists(save_image_file)){
+  
+  # MCMC Loop 
+  
+  for(g in 1:ngibbs){
+    
+    # cmnew
+    cmnew <- rtnorm(1,cmax,JumpSD_cmax) # Draw a new Cmax
+    bnew <- rtnorm(4,beta,JumpSD_beta)   ## propose new beta (all have to be > 0, using rlnorm)
+    
+    # x are in order: x = [temp, rad, vpd, swc] 
+    f_temp = 1 - exp(-bnew[1]*x[,1])
+    f_rad = x[,2]/(x[,2] + bnew[2])
+    f_vpd = 1/(1 + (bnew[3]*x[,3]))
+    f_smc = 1-exp(-bnew[4]*x[,4])
+    
+    ## calculate new CSurf
+    CSurfnew <- cmnew*f_temp*f_rad*f_vpd*f_smc
+    LEnew <- Bisection_ts(ameriflux_df, ameriflux_meta_st, 1/CSurfnew) ## calculate new LE (black box code), 
+    # note that the blackbox code ^ above takes resistance = 1/csurf
+    
+    anum <- sum(dnorm(LEobs,LEnew,sg,log=TRUE)) +   ##likelihood
+      sum(dtnorm(bnew,bprior,Vb)) +  dtnorm(cmnew,cm_0,cm_sd)	 ## priors on beta and cmax
+    aden <- (sum(dnorm(LEobs,LE,sg,log=TRUE)) +   ##likelihood
+               sum(dtnorm(beta,bprior,Vb)) + dtnorm(cmax,cm_0,cm_sd))  ## prior, already in log    
+    jnum <- sum(dtnorm(bnew,beta,JumpSD_beta)) +  dtnorm(cmnew,cmax,JumpSD_cmax)		##jump
+    jden <- sum(dtnorm(beta,bnew,JumpSD_beta)) +  dtnorm(cmax,cmnew,JumpSD_cmax)			##jump
+    
+    a <- exp((anum-jnum)-(aden-jden))  		## acceptance criteria
+    
+    if(a > runif(1)){					          ## accept with probability a
+      print(paste("accepted sample: ",g, sep=""))
+      beta <- bnew						          ## update theta if step accepted
+      LE <- LEnew						            ## update X if step accepted
+      cmax <- cmnew
+      }
+    
+    ## sample variance
+    u1 <- s1 + n/2
+    u2 <- s2 + 0.5*crossprod(LEobs-LE)
+    sinv <- rgamma(1,u1,u2)
+    sg <- 1/sinv
+    
+    ## storage
+    bgibbs[g,] <- beta  ## store the current value of beta vector
+    sgibbs[g]  <- sg  ## store the current value of the variance
+    cmgibbs[g] <- cmax  ## store the current value of the maximum conductance
+    
+    print(g)	##show how many steps have been performed
+    
+    } # end loop
+  
+  # save.image(save_image_file)
+  
+  }else{
+    load(save_image_file) 
+    }
+```
+
+##3. Results    
+
+**NOTE:** Loads the data from a previous run with ngibbs = 10000 samples
+```{r}
+load(save_image_file) 
+
+bmcmc <- mcmc(bgibbs)
+cmcmc <- mcmc(cmgibbs)
+smcmc <- mcmc(sgibbs)
+
+accept_rate = 1-rejectionRate(bmcmc[,1])	    ## acceptance rate
+
+autocorr.plot(bmcmc)    ## autocorrelation
+autocorr.plot(cmcmc)  	## autocorrelation
+autocorr.plot(smcmc)  	## autocorrelation
+```
+
+The acceptance rate is 54%, which is in the desired range of 30-70%. Based on the autocorrelation plot above and the history plots (not shown), I set the thin to 15 and the burn-in to 1000. 
+
+```{r}
+
+thin = 15 # based on autocorrelation plots
+beg = 1000 # based on history plots
+
+# "_BT" == burnin and thinned
+bmcmc_BT <- mcmc(bgibbs[seq(from=beg,to=ngibbs,by=thin),])
+cmcmc_BT <- mcmc(cmgibbs[seq(from=beg,to=ngibbs,by=thin)])
+smcmc_BT <- mcmc(sgibbs[seq(from=beg,to=ngibbs,by=thin)])
+
+```
+
+I recognize that there are only 600 samples after removing the burn-in and thinning. Eventually, I will need to run much more samples. 
+
+```{r}
+pdf(paste("History_Csurf_V4_",ngibbs,"S.pdf"))
+plot(bmcmc_BT)
+plot(cmcmc_BT)
+plot(smcmc_BT)
+dev.off()
+
+plot(density(bmcmc_BT[,1]),main="Beta 1")
+plot(density(bmcmc_BT[,2]),main="Beta 2")
+plot(density(bmcmc_BT[,3]),main="Beta 3")
+plot(density(bmcmc_BT[,4]),main="Beta 4")
+plot(density(cmcmc_BT),main="Cmax")
+plot(density(smcmc_BT),main="Stdev")
+
+summary(bmcmc_BT)
+
+```
+
+This is the results of this model are poor. The density plots are not unimodal. It seems that multiple solutions/combinations of parmaters allow predict the same results.
+
+Summary table of parameter values:
+```{r}
+mean = c(0.1233,100.6751,3.8124,10.8812,0.0237476,22609.7)
+SD = c(0.07498,86.80068,3.28100,8.37850,0.0125445,14346.6)
+SE = c(0.003059,3.540674,0.133835,0.341766,0.0005117,585.2)
+Q_2.5 = c(0.006903,0.032300,0.043886,0.053920,0.002958,6853)
+Q_97.5 = c(0.2899,292.9823,11.5787,29.8048,0.049404,50615)
+data.frame(mean,SD,SE,Q_2.5,Q_97.5, 
+           row.names = c("beta 1","beta 2","beta 3","beta 4","cmax","sigma"))
+
+```
+
+Using the mean parameter value, the constraining funcitons are as follows:
+```{r}
+# x are in order: x = [temp, rad, vpd, swc] 
+f_temp = 1 - exp(-mean[1]*x[,1])
+f_rad = x[,2]/(x[,2] + mean[2])
+f_vpd = 1/(1 + (mean[3]*x[,3]))
+f_smc = 1-exp(-mean[4]*x[,4])
+
+par(mfrow=c(2,2))
+plot(temp_seq,1-exp(-mean[1]*temp_seq),xlab = "Temperature (degreeC)", ylab = "Relative Csurf") 
+plot(rad_seq,rad_seq/(rad_seq+mean[2]),xlab="Raditation (W/m^2)", ylab = "Relative Csurf") 
+plot(vpd_seq,1/(1+mean[3]*vpd_seq),xlab="VPD (kPa)", ylab = "Relative Csurf")   
+plot(smc_seq,1-exp(-mean[4]*smc_seq),xlab="SMC (fraction)", ylab = "Relative Csurf")
+
+```
+
+Make one to one plot:
+```{r}
+## calculate new CSurf
+CSurf_fit <- mean[5]*f_temp*f_rad*f_vpd*f_smc
+LE_fit <- Bisection_ts(ameriflux_df, ameriflux_meta_st, 1/CSurf_fit) 
+
+plot(LEobs,LE_fit,xlim = c(0,400),ylim = c(0,400),
+     ylab = "LE fit (W/m^2)", xlab = "LE modeled (W/m^2)")
+abline(0,1,col=2)
+```
+
+The model is underpredicting high values of LE, as seen in the plot above.  
+
+These are preliminary results. To investigate why the model fit is poor, my plan going forward is to run the model with different/more/less constraint functions. Specifically I plan to:   
+
+**1.** Change the constraint function for temperature so that there is an "optimal" temperature, having a shape like below:  
+```{r}
+par(mfrow=c(1,2))
+plot(temp_seq,1-(.002*(temp_seq-30)^2),xlab = "Temperature (degreeC)", ylab = "Relative Csurf") 
+title("Desired relationship")
+plot(temp_seq,1-exp(-mean[1]*temp_seq),xlab = "Temperature (degreeC)", ylab = "Relative Csurf") 
+title("Current relationship")
+
+```
+
+**2.** Explore running the model with only one or two constraints. There are clear correlations between the environmental conditions (e.g. soil moisture and VPD), that could be messing up the parameter estimates. Radiation, air temperature, vapor pressure deficit, and soil moisture are all (very) related, so running the model independenly for each parameter and recording DIC scores will give insight into the important parameters.  
+
+**4.** Add confidence intervals.  
+
+**3.** Run the model for more samples
+
+
+**Works Cited**      
+Garratt, J. R. (1992). The Atmospheric Boundary Layer. Cambridge University Press, New York, 1st Hardback Ed.  
+Jones, H. G. (2014). Plants and Microclimate: A Quantitative Approach to Environmental Plant Physiology. Cambridge University Press, New York, 3rd Ed.   
+Stewart, J. B. (1988). Modeling Surface Conductance of Pine Forest, Agricultural and Forest Meteorology, 43(1), 19–35.   
+
+[1]: http://ameriflux.ornl.gov/fullsiteinfo.php?sid=68
