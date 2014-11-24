@@ -1,0 +1,5 @@
+FILE QUARANTINED
+
+Microsoft Forefront Protection for Exchange Server removed a file since it was found to be infected.
+File name: "winmail.dat->Csurf_V4_10000S"
+Malware name: "CorruptedCompressedFile"
