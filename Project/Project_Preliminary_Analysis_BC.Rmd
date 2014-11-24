@@ -5,9 +5,9 @@ date: "November 21, 2014"
 output: html_document
 ---
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 ## Set up data
-library("rjags")
+# library("rjags")
 library(coda)
 library(mvtnorm)
 # setwd(paste0(getwd(),"/Project/"))
@@ -35,9 +35,29 @@ if(file.exists("jags.outputs.Rdata")){
   }
 ```
 
+# Goal 
+
+The  goal of this project is to develop a multivariate Bayesian meta-analytical model that synthesizes plant trait data from multiple studies while accounting for various sources of uncertainty. Using observed sample mean, sample size, and a sample error statistics for multiple plant traits, we aim to produced well constrained estimates of mean and precision for a single trait. This has be done in PEcAn (the Predictive Ecosystem Analyzer) using a univariate model [1], however, a multivariate model can leverage the fact that many plant traits are highly correlated [2] to constrain our estimates even further. This may be especially useful improving predictions for studies in which observations are missing. 
+
+For this project I am using the data set compiled by Wright et. all to develop a "leaf economics spectrum" [2]. This data is from the global plant trait network (Glopnet), a database created to quantify leaf economics across the world’s plant species. 
+
+From this data set I will be focusing on six plant-traits:
+
+(1) Leaf mass per area (LMA) 
+
+(2) Photosynthetic capacity (Amass) - photosynthetic assimilation rates measured under high light, ample soil moisture and ambient CO2
+
+(3) Leaf nitrogen (N) 
+
+(4) Leaf phosphorus (P)
+
+(5) Dark respiration rate (Rmass)  
+
+(6) Leaf lifespan (LL) 
+
 # Data
 
-#### With NA's 
+#### Including studies with missing observations 
 ```{r,echo=FALSE, fig.width=10, fig.height=10}
 pairs(gdata.na, panel=function(x,y){
   points(x,y)
@@ -48,10 +68,10 @@ pairs(gdata.na, panel=function(x,y){
 })
 ```
 
-Here we have plotted each plant trait against one another with a regression line in red if the regression is statistically significant. We can see that each plant trait has a statistically significant correlation with all the others, which suggests that a multivariate analysis will in fact be informative. 
+Here we have plotted each the log of each plant trait variable against one another with a regression line in red if the regression is statistically significant. We can see that each plant trait has a statistically significant ($p < .01$) correlation with all the others, which suggests that a multivariate analysis will in fact be informative. 
 
 
-#### Without NA's 
+#### Excluding studies with missing observations 
 ```{r,echo=FALSE, fig.width=10, fig.height=10}
 pairs(gdata, panel=function(x,y){
   points(x,y)
@@ -62,25 +82,31 @@ pairs(gdata, panel=function(x,y){
 })
 ```
 
-Here we have the exact same plot as above, but with only the studies that do not contain missing observations. Clearly we have a lot less data to work with and thus the R-squared values are lower and one pair of traits no longer have a statistically significant correlation. 
+Here we have the exact same plot as above, but only including the studies that do not contain missing observations. Clearly there is less data to work with and thus the R-squared values are lower and one pair of traits no longer have a statistically significant correlation. However, I expect that given the presence of so many statistically significant correlations, the multivariate model will provide improved predictions for the means of each variable. 
 
 # Univariate Model
 
-First we will estimate plant traits using a univariate model:
+Let $Y_{i,j}$ represent the observed value of the $j$th trait variable in study $i$.
 
-#### JAGS Model
+#### Model Graph
+```{r, echo=FALSE, fig.width=5}
+library(png)
+library(grid)
+img <- readPNG("Univariate.png")
+ grid.raster(img)
+```
+
+#### Model in JAGS
 ```{r, eval=FALSE}
 model{
-  prec.Sigma~dwish(Vsig[,],n)
-  Sigma[1:n,1:n] <- inverse(prec.Sigma[,])
-  
-  mu[1:n]~dmnorm(mu0[],Vmu)
+  prec.sigma~dgamma(.001,.001)
+  sigma <- 1/prec.sigma
+  for(i in 1:n){mu[i]~dnorm(0,.001)}
   
   for(i in 1:N){
     for(j in 1:n){
-      X[i,j]~dnorm(Y[i,j],10000000)
+      Y[i,j]~dnorm(mu[j],prec.sigma)
       }
-    Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
     }
   }
 ```
@@ -123,9 +149,45 @@ if(run){
   out3 = j.out
   }
 
+out1.df <- as.data.frame(as.matrix(out1))
+out3.df <- as.data.frame(as.matrix(out3))
+
+colnames(out1.df)<-colnames(out3.df)<-colnames(gdata)
+
+outs <- list(out1.df,NA,out3.df,NA)
+
+# for(j in 1:6){
+#   ranges <-  apply(cbind(outs[[1]][,j],outs[[3]][,j]), 2,
+#                    function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+#   plot(density(outs[[1]][,j]),
+#        xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+#        main=paste(names(gdata)[j]))
+#   if(j==1 | j ==2){position="topright"}else{position="topleft"}
+#   legend(position,legend = c("Uni w/o NA's ", "Uni w/ NA's " ), lty = c(1,1), col=c(1,6))
+#   lines(density(outs[[3]][,j]), col=6)
+#   }
+
+
 ```
 
+
 # Multivariate Model
+
+Let 
+
+$Y_{i}$ represent the vector of observed value of the $j$ traits variable in study $i$.
+
+$Y^0_{i,j}$ represent the observed value $j$th trait variable in study $i$, taking into account observation error.
+
+#### Model Graph
+```{r, echo=FALSE, fig.width=6}
+library(png)
+library(grid)
+img <- readPNG("Multivariate.png")
+ grid.raster(img)
+```
+
+#### Model in JAGS
 ```{r, eval=FALSE}
 model{
   prec.Sigma~dwish(Vsig[,],n)
@@ -134,10 +196,10 @@ model{
   mu[1:n]~dmnorm(mu0[],Vmu)
   
   for(i in 1:N){
+    Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
     for(j in 1:n){
       X[i,j]~dnorm(Y[i,j],10000000)
       }
-    Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
     }
   }
 ```
@@ -152,10 +214,11 @@ Sigma[1:n,1:n] <- inverse(prec.Sigma[,])
 mu[1:n]~dmnorm(mu0[],Vmu)
 
 for(i in 1:N){
+Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
 for(j in 1:n){
 X[i,j]~dnorm(Y[i,j],10000000)
 }
-Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
+
 }
 }"
 
@@ -183,12 +246,32 @@ out4 = j.out
 
 
 }
+
+out2.df <- as.data.frame(as.matrix(out2))
+out4.df <- as.data.frame(as.matrix(out4))
+
+colnames(out2.df)<-colnames(out4.df)<-colnames(gdata)
+
+outs <- list(out1.df,out2.df,out3.df,out4.df)
+
+# for(j in 1:6){
+#   ranges <-  apply(cbind(outs[[2]][,j],outs[[4]][,j]), 2,
+#                    function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+#   plot(density(outs[[2]][,j]),
+#        xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+#        main=paste(names(gdata)[j]))
+#   if(j==1 | j ==2){position="topright"}else{position="topleft"}
+#   legend(position,legend = c("Uni w/o NA's ", "Uni w/ NA's " ), lty = c(1,1), col=c(1,6))
+#   lines(density(outs[[4]][,j]), col=6)
+#   }
+
+
 ```
 
 ```{r,echo=FALSE}
-if{!run}{
-  save(out1,out2,out3,out4, file="jags.outputs.Rdata")
-}
+# if{run}{
+#   save(out1,out2,out3,out4, file="jags.outputs.Rdata")
+# }
 ```
 
 
@@ -197,17 +280,8 @@ if{!run}{
 
 # Comparisons
 
-#### Means
-```{r, echo=FALSE}
-
-out1.df <- as.data.frame(as.matrix(out1))
-out2.df <- as.data.frame(as.matrix(out2))
-out3.df <- as.data.frame(as.matrix(out3))
-out4.df <- as.data.frame(as.matrix(out4))
-
-colnames(out1.df) <- colnames(out2.df) <-colnames(out3.df) <-colnames(out4.df) <-colnames(gdata)
-
-outs <- list(out1.df,out2.df,out3.df,out4.df)
+#### Overall comparison of computed and estimated means for each of the 6 variables 
+```{r, echo=FALSE, fig.height=10,fig.width=10}
 
 mus <- as.data.frame(matrix(NA, 5,6))
 mus[1,] <- colMeans(gdata)
@@ -217,21 +291,32 @@ for(i in 1:4){
   }
 }
 
-mus <- as.data.frame(matrix(NA, 5,6))
-mus[1,] <- colMeans(gdata)
-for(i in 1:4){
-  for(j in 1:6){
-        mus[i+1,j] <- mean(outs[[i]][,j])
-  }
-}
-
-rownames(mus) <- c("Data ","Univariate   with NA's", "Univariate   without NA's ", "Multivariate with NA's", "Multivariate without NA's " )
+rownames(mus) <- c("Data ","Univariate   without NA's ", "Multivariate without NA's ", "Univariate   with NA's",  "Multivariate with NA's" )
 colnames(mus) <- colnames(gdata) 
-
+options(digits=4)
 print(mus)
 
-#summaries
+par(mfrow = c(3,2))
+for(j in 1:6){
+  ranges <-  apply(cbind(outs[[1]][,j],outs[[2]][,j],outs[[3]][,j],outs[[4]][,j]), 2,
+                   function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+  plot(density(outs[[1]][,j]), col="red", lty=2,
+       xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+       main=paste(names(gdata)[j]))
+  if(j==1 | j ==2){position="topright"}else{position="topleft"}
+  legend(position,legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
+  lines(density(outs[[2]][,j]), col="blue", lty=2)
+  lines(density(outs[[3]][,j]), col="red")
+  lines(density(outs[[4]][,j]), col="blue")
+  }
+```
 
+When using data that excludes all studies with missing observations, there is practically no difference between the two model's estimated means for each of the variables. However, for both models, including studies with NA's produces estimated means that are significantly different from those produced with data excluding NA's. For the variables Log.LMA and Log.Amass, the estimated means from the univariate and multivariate models were very close, but for the remaining variables,  they were noticeably different, with the estimated mean from the univariate model always closer to the data mean than the estimated mean from the multivariate model. 
+
+#### Error around the mean
+
+```{r, echo=FALSE}
+options(digits=4)
 for(j in 1:6){
   cat("","",colnames(gdata)[j],sep="\n")
   summary <- as.data.frame(matrix(NA,5,4))
@@ -239,95 +324,78 @@ for(j in 1:6){
   for(i in 1:4){ 
     summary[i+1,] <- c(mean(outs[[i]][,j]), sd(outs[[i]][,j])/sqrt(length(outs[[i]][,j])), quantile(outs[[i]][,j], c(.025, .975)))
     }
-
-  rownames(mus) <- c("Data ","Univariate   with NA's", "Univariate   without NA's ", "Multivariate with NA's", "Multivariate without NA's " )
+  
+  rownames(summary) <- c("Data ","Univariate   without NA's ", "Multivariate without NA's ", "Univariate   with NA's",  "Multivariate with NA's" )
   colnames(summary) <- c("Mean", "SE", "2.5%", "97.5%")
   print(summary)
   
   cat("lowest SE:", rownames(summary)[which(summary$SE==min(summary$SE))])
   }
 
-
-
 ```
 
+#### Excluding Studies with Missing Observations
 
-#### Density function
 ```{r, echo=FALSE, fig.height=10,fig.width=10}
 par(mfrow = c(3,2))
-
-ranges <-  apply(cbind(out1.df$"mu[1]",out2.df$"mu[1]",out3.df$"mu[1]",out4.df$"mu[1]"), 2,
-                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
-plot(density(out1.df$"mu[1]"), col="red", 
-     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
-     main=paste(names(gdata)[1]))
-legend("topright",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
-lines(density(out2.df$"mu[1]"), col="blue")
-lines(density(out3.df$"mu[1]"), col="red", lty=2)
-lines(density(out4.df$"mu[1]"), col="blue", lty=2)
-
-
-
-ranges <-  apply(cbind(out1.df$"mu[2]",out2.df$"mu[2]]",out3.df$"mu[2]",out4.df$"mu[2]"), 2,
-                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
-plot(density(out1.df$"mu[2]"), col="red", 
-     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
-     main=paste(names(gdata)[2]))
-legend("topright",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
-lines(density(out2.df$"mu[2]"), col="blue")
-lines(density(out3.df$"mu[2]"), col="red", lty=2)
-lines(density(out4.df$"mu[2]"), col="blue", lty=2)
-
-
-ranges <-  apply(cbind(out1.df$"mu[3]",out2.df$"mu[3]",out3.df$"mu[3]",out4.df$"mu[3]"), 2,
-                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
-plot(density(out1.df$"mu[3]"), col="red", 
-     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
-     main=paste(names(gdata)[3]))
-legend("topleft",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
-lines(density(out2.df$"mu[3]"), col="blue")
-lines(density(out3.df$"mu[3]"), col="red", lty=2)
-lines(density(out4.df$"mu[3]"), col="blue", lty=2)
-
-
-
-ranges <-  apply(cbind(out1.df$"mu[4]",out2.df$"mu[4]",out3.df$"mu[4]",out4.df$"mu[4]"), 2,
-                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
-plot(density(out1.df$"mu[4]"), col="red", 
-     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
-     main=paste(names(gdata)[4]))
-legend("topleft",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
-lines(density(out2.df$"mu[4]"), col="blue")
-lines(density(out3.df$"mu[4]"), col="red", lty=2)
-lines(density(out4.df$"mu[4]"), col="blue", lty=2)
-
-
-
-ranges <-  apply(cbind(out1.df$"mu[5]",out2.df$"mu[5]",out3.df$"mu[5]",out4.df$"mu[5]"), 2,
-                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
-plot(density(out1.df$"mu[5]"), col="red", 
-     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
-     main=paste(names(gdata)[5]))
-legend("topleft",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
-lines(density(out2.df$"mu[5]"), col="blue")
-lines(density(out3.df$"mu[5]"), col="red", lty=2)
-lines(density(out4.df$"mu[5]"), col="blue", lty=2)
-
-
-
-ranges <-  apply(cbind(out1.df$"mu[6]",out2.df$"mu[6]",out3.df$"mu[6]",out4.df$"mu[6]"), 2,
-                 function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
-plot(density(out1.df$"mu[6]"), col="red", 
-     xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
-     main=paste(names(gdata)[6]))
-legend("topleft",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
-lines(density(out2.df$"mu[6]"), col="blue")
-lines(density(out3.df$"mu[6]"), col="red", lty=2)
-lines(density(out4.df$"mu[6]"), col="blue", lty=2)
-
+for(j in 1:6){
+  ranges <-  apply(cbind(outs[[1]][,j],outs[[2]][,j]), 2,
+                   function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+  plot(density(outs[[1]][,j]), col="red",
+       xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+       main=paste(names(gdata)[j]))
+  legend("topleft",legend = c("Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1), col=c("blue","red"))
+  legend("topright",legend = c("2.5%","mean","97.5%" ), lty = c(2,3,2))
+  lines(density(outs[[2]][,j]), col="blue")
+  abline(v=mean(outs[[1]][,j]), col="red", lty=3)
+  abline(v=quantile(outs[[1]][,j], .025), col="red", lty=2)
+  abline(v=quantile(outs[[1]][,j], .975), col="red", lty=2)
+  abline(v=mean(outs[[2]][,j]), col="blue", lty=3)
+  abline(v=quantile(outs[[2]][,j], .025), col="blue", lty=2)
+  abline(v=quantile(outs[[2]][,j], .975), col="blue", lty=2)  
+  }
 ```
 
+Contrary to what I expected, the variation in the multivariate model showed little to no improvement over the univariate.  The multivariate model produced posterior distributions with larger variance around the mean (except for Log.Nmass where the SE for the univariate model was larger by 3.3e-06, a small amount relative to the size of the mean.)
 
+
+#### Including Studies with Missing Observations
+```{r, echo=FALSE, fig.height=10,fig.width=10}
+par(mfrow = c(3,2))
+for(j in 1:6){
+  ranges <-  apply(cbind(outs[[3]][,j],outs[[4]][,j]), 2,
+                   function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
+  plot(density(outs[[3]][,j]), col="red",
+       xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
+       main=paste(names(gdata)[j]))
+  legend("topleft",legend = c( "Multi w/ NA's","Uni   w/ NA's"), lty = c(1,1), col=c("blue","red"))
+  legend("topright",legend = c("2.5%","mean","97.5%" ), lty = c(2,3,2))
+  lines(density(outs[[4]][,j]), col="blue")
+  abline(v=mean(outs[[3]][,j]), col="red", lty=3)
+  abline(v=quantile(outs[[3]][,j], .025), col="red", lty=2)
+  abline(v=quantile(outs[[3]][,j], .975), col="red", lty=2)
+  abline(v=mean(outs[[4]][,j]), col="blue", lty=3)
+  abline(v=quantile(outs[[4]][,j], .025), col="blue", lty=2)
+  abline(v=quantile(outs[[4]][,j], .975), col="blue", lty=2) 
+  }
+```
+
+When studies with missing observations are included, the standard errors begin to behave more like one might expect. The posterior distributions from the multivariate model have smaller variances for all the variables except Log.Pmass. However, it is difficult to see the difference since the expected means of the variables are no longer similar. 
+
+# Continued Analysis
+
+- Examine the posterior distributions of the estimated variances
+
+- Account for the fact that the data is summary data
+
+- Add random effects into the model
+
+
+# References
+
+[1] LeBauer, D.S., Wang, D., Richter, K.T., Davidson, C.C. & Dietze, M.C. Facilitating feedbacks between field measurements and ecosystem models. Ecological Monographs 83, 133-154 (2013).
+
+[2] Wright, I.J. et al. The worldwide leaf economics spectrum. Nature 428, 821-827 (2004).
 
 
 ```{r}
