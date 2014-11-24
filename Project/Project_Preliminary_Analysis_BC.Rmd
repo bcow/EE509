@@ -7,8 +7,11 @@ output: html_document
 
 ```{r, echo=FALSE}
 ## Set up data
-library(rjags)
-glopnet <- read.csv("~/R Projects/EE509/Project/glopnet.csv")
+library("rjags")
+library(coda)
+library(mvtnorm)
+# setwd(paste0(getwd(),"/Project/"))
+glopnet <- read.csv("glopnet.csv")
 glopnet[c("X")] <- NULL
 glopnet[c("X.1")] <- NULL
 glopnet[c("X.2")] <- NULL
@@ -35,17 +38,35 @@ if(file.exists("jags.outputs.Rdata")){
 # Data
 
 #### With NA's 
-```{r,echo=FALSE}
-pairs(gdata.na)
+```{r,echo=FALSE, fig.width=10, fig.height=10}
+pairs(gdata.na, panel=function(x,y){
+  points(x,y)
+  fit <- lm(y~x)
+  p <- pf(summary(fit)$fstatistic[1],summary(fit)$fstatistic[2],summary(fit)$fstatistic[3], lower.tail = F)
+	if(p < .01){abline(fit, col='red',lwd=2)}
+  legend("top", legend=sprintf("R2 = %.2f",summary(fit)$r.squared), text.col="blue")
+})
 ```
+
+Here we have plotted each plant trait against one another with a regression line in red if the regression is statistically significant. We can see that each plant trait has a statistically significant correlation with all the others, which suggests that a multivariate analysis will in fact be informative. 
+
 
 #### Without NA's 
-```{r,echo=FALSE}
-pairs(gdata)
+```{r,echo=FALSE, fig.width=10, fig.height=10}
+pairs(gdata, panel=function(x,y){
+  points(x,y)
+  fit <- lm(y~x)
+  p <- pf(summary(fit)$fstatistic[1],summary(fit)$fstatistic[2],summary(fit)$fstatistic[3], lower.tail = F)
+  if(p < .01){abline(fit, col='red',lwd=2)}
+  legend("top", legend=sprintf("R2 = %.2f",summary(fit)$r.squared), text.col="blue")
+})
 ```
 
+Here we have the exact same plot as above, but with only the studies that do not contain missing observations. Clearly we have a lot less data to work with and thus the R-squared values are lower and one pair of traits no longer have a statistically significant correlation. 
 
 # Univariate Model
+
+First we will estimate plant traits using a univariate model:
 
 #### JAGS Model
 ```{r, eval=FALSE}
@@ -88,7 +109,7 @@ if(run){
   j.model   <- jags.model (file = textConnection(UnivModel),data = data,inits = init, n.chains = 3)
   update(j.model, n.iter=1000)
   j.out   <- coda.samples (model = j.model,variable.names= c("mu"), n.iter = 10000)
-  out3 = j.out
+  out1 = j.out
   
   
   # With na's
@@ -99,11 +120,10 @@ if(run){
   j.model   <- jags.model (file = textConnection(UnivModel),data = data,inits = init, n.chains = 3)
   update(j.model, n.iter=1000)
   j.out   <- coda.samples (model = j.model,variable.names= c("mu"), n.iter = 10000)
-  out4 = j.out
+  out3 = j.out
   }
 
 ```
-
 
 # Multivariate Model
 ```{r, eval=FALSE}
@@ -147,7 +167,7 @@ init = NULL
 j.model   <- jags.model (file = textConnection(MultModel),data = data,inits = init,n.chains = 3)
 update(j.model, n.iter=1000)
 j.out   <- coda.samples (model = j.model,variable.names= c("mu"),n.iter = 10000)
-out1 = j.out
+out2 = j.out
 
 
 # With na's 
@@ -159,11 +179,21 @@ init = NULL
 j.model   <- jags.model (file = textConnection(MultModel), data = data, inits = init, n.chains = 3)
 update(j.model, n.iter=1000)
 j.out   <- coda.samples (model = j.model, variable.names= c("mu"), n.iter = 10000)
-out2 = j.out
+out4 = j.out
 
 
 }
 ```
+
+```{r,echo=FALSE}
+if{!run}{
+  save(out1,out2,out3,out4, file="jags.outputs.Rdata")
+}
+```
+
+
+
+
 
 # Comparisons
 
@@ -175,71 +205,122 @@ out2.df <- as.data.frame(as.matrix(out2))
 out3.df <- as.data.frame(as.matrix(out3))
 out4.df <- as.data.frame(as.matrix(out4))
 
+colnames(out1.df) <- colnames(out2.df) <-colnames(out3.df) <-colnames(out4.df) <-colnames(gdata)
 
-rbind(
-  colMeans(j.data),
-  c(mean(out1.df$"mu[1]"),mean(out1.df$"mu[2]"),mean(out1.df$"mu[3]"),mean(out1.df$"mu[4]"),mean(out1.df$"mu[5]"),mean(out1.df$"mu[6]")),
-  c(mean(out2.df$"mu[1]"),mean(out2.df$"mu[2]"),mean(out2.df$"mu[3]"),mean(out2.df$"mu[4]"),mean(out2.df$"mu[5]"),mean(out2.df$"mu[6]")),
-  c(mean(out3.df$"mu[1]"),mean(out3.df$"mu[2]"),mean(out3.df$"mu[3]"),mean(out3.df$"mu[4]"),mean(out3.df$"mu[5]"),mean(out3.df$"mu[6]")),
-  c(mean(out4.df$"mu[1]"),mean(out4.df$"mu[2]"),mean(out4.df$"mu[3]"),mean(out4.df$"mu[4]"),mean(out4.df$"mu[5]"),mean(out4.df$"mu[6]"))
-  )
+outs <- list(out1.df,out2.df,out3.df,out4.df)
+
+mus <- as.data.frame(matrix(NA, 5,6))
+mus[1,] <- colMeans(gdata)
+for(i in 1:4){
+  for(j in 1:6){
+        mus[i+1,j] <- mean(outs[[i]][,j])
+  }
+}
+
+mus <- as.data.frame(matrix(NA, 5,6))
+mus[1,] <- colMeans(gdata)
+for(i in 1:4){
+  for(j in 1:6){
+        mus[i+1,j] <- mean(outs[[i]][,j])
+  }
+}
+
+rownames(mus) <- c("Data ","Univariate   with NA's", "Univariate   without NA's ", "Multivariate with NA's", "Multivariate without NA's " )
+colnames(mus) <- colnames(gdata) 
+
+print(mus)
+
+#summaries
+
+for(j in 1:6){
+  cat("","",colnames(gdata)[j],sep="\n")
+  summary <- as.data.frame(matrix(NA,5,4))
+  summary[1,] <- c(mean(gdata[,j]), sd(gdata[,j])/sqrt(length(gdata[,j])), quantile(gdata[,j], c(.025, .975)))
+  for(i in 1:4){ 
+    summary[i+1,] <- c(mean(outs[[i]][,j]), sd(outs[[i]][,j])/sqrt(length(outs[[i]][,j])), quantile(outs[[i]][,j], c(.025, .975)))
+    }
+
+  rownames(mus) <- c("Data ","Univariate   with NA's", "Univariate   without NA's ", "Multivariate with NA's", "Multivariate without NA's " )
+  colnames(summary) <- c("Mean", "SE", "2.5%", "97.5%")
+  print(summary)
+  
+  cat("lowest SE:", rownames(summary)[which(summary$SE==min(summary$SE))])
+  }
+
+
+
 ```
 
 
 #### Density function
-```{r, echo=FALSE}
-par(mfrow = c(1,2))
+```{r, echo=FALSE, fig.height=10,fig.width=10}
+par(mfrow = c(3,2))
 
 ranges <-  apply(cbind(out1.df$"mu[1]",out2.df$"mu[1]",out3.df$"mu[1]",out4.df$"mu[1]"), 2,
                  function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
 plot(density(out1.df$"mu[1]"), col="red", 
      xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
      main=paste(names(gdata)[1]))
+legend("topright",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
 lines(density(out2.df$"mu[1]"), col="blue")
 lines(density(out3.df$"mu[1]"), col="red", lty=2)
 lines(density(out4.df$"mu[1]"), col="blue", lty=2)
+
+
 
 ranges <-  apply(cbind(out1.df$"mu[2]",out2.df$"mu[2]]",out3.df$"mu[2]",out4.df$"mu[2]"), 2,
                  function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
 plot(density(out1.df$"mu[2]"), col="red", 
      xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
      main=paste(names(gdata)[2]))
+legend("topright",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
 lines(density(out2.df$"mu[2]"), col="blue")
 lines(density(out3.df$"mu[2]"), col="red", lty=2)
 lines(density(out4.df$"mu[2]"), col="blue", lty=2)
+
 
 ranges <-  apply(cbind(out1.df$"mu[3]",out2.df$"mu[3]",out3.df$"mu[3]",out4.df$"mu[3]"), 2,
                  function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
 plot(density(out1.df$"mu[3]"), col="red", 
      xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
      main=paste(names(gdata)[3]))
+legend("topleft",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
 lines(density(out2.df$"mu[3]"), col="blue")
 lines(density(out3.df$"mu[3]"), col="red", lty=2)
 lines(density(out4.df$"mu[3]"), col="blue", lty=2)
+
+
 
 ranges <-  apply(cbind(out1.df$"mu[4]",out2.df$"mu[4]",out3.df$"mu[4]",out4.df$"mu[4]"), 2,
                  function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
 plot(density(out1.df$"mu[4]"), col="red", 
      xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
      main=paste(names(gdata)[4]))
+legend("topleft",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
 lines(density(out2.df$"mu[4]"), col="blue")
 lines(density(out3.df$"mu[4]"), col="red", lty=2)
 lines(density(out4.df$"mu[4]"), col="blue", lty=2)
+
+
 
 ranges <-  apply(cbind(out1.df$"mu[5]",out2.df$"mu[5]",out3.df$"mu[5]",out4.df$"mu[5]"), 2,
                  function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
 plot(density(out1.df$"mu[5]"), col="red", 
      xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
      main=paste(names(gdata)[5]))
+legend("topleft",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
 lines(density(out2.df$"mu[5]"), col="blue")
 lines(density(out3.df$"mu[5]"), col="red", lty=2)
 lines(density(out4.df$"mu[5]"), col="blue", lty=2)
+
+
 
 ranges <-  apply(cbind(out1.df$"mu[6]",out2.df$"mu[6]",out3.df$"mu[6]",out4.df$"mu[6]"), 2,
                  function(x) { dens <- density(x); c(range(dens$x), range(dens$y)) })
 plot(density(out1.df$"mu[6]"), col="red", 
      xlim = range(ranges[1:2, ]), ylim = range(ranges[3:4, ]),
      main=paste(names(gdata)[6]))
+legend("topleft",legend = c( "Multi w/ NA's","Uni   w/ NA's", "Mult w/o NA's ", "Uni  w/o NA's " ), lty = c(1,1,2,2), col=c("blue","red","blue","red"))
 lines(density(out2.df$"mu[6]"), col="blue")
 lines(density(out3.df$"mu[6]"), col="red", lty=2)
 lines(density(out4.df$"mu[6]"), col="blue", lty=2)
