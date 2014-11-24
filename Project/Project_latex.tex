@@ -116,17 +116,74 @@
 
 \maketitle
 
-The goal of this project is to do a multivariate 
 
-\noindent
-$y \sim N_3(\mu, \Sigma)$ \\
-$\mu \sim N_3 (\mu_0, V_\mu)$\\
-$\Sigma \sim wish(V,df)$\\
-$X \sim N_p(\mu,\Sigma)$\\
-$X^0_{i,j} \sim N(X_{i,j}, \Sigma_{obs}) $\\
-$\mu \sim N $\\
-$\Sigma \sim IW $\\
+\noindent Data Model :\\
+$Y_i \sim N_p(\vec{\mu}_i, \Sigma) $\\
+$Y^{(0)}_{i,j} \sim N_p(Y_{i,j}, \sigma^2)$\\
+ 
 
+\noindent Process Model :\\
+$\sigma^2 \sim IG(s_1,s_2)$\\
+$\mu_{i,j} \sim N(\mu_0, V_\mu)$\\
+$\Sigma \sim IW(V, df)$ \\
+
+\noindent Parameter Model: \\
+
+$\boxed{Y^{(0)}_{i,j} \hspace{3em} Y_i }$\\
+\\
+
+$\boxed{\sigma^2 \hspace{3em} [\mu_1, \dots, \mu_p]_i \hspace{.5em},\hspace{.5em}  \Sigma}$\\
+\\
+\\
+
+$\boxed{s_1,s_2 \hspace{3em} \mu_0, V_{\mu} \hspace{3em} V, df}$\\
+
+
+
+\noindent Data Model :\\
+$Y_{i,j} \sim N(\mu_{i,j}, \sigma^2) $\\
+ 
+
+\noindent Process Model :\\
+$\sigma^2 \sim IG(s_1,s_2)$\\
+$\mu_{i,j} \sim N(\mu_0, V_\mu)$\\
+
+
+\noindent Parameter Model: \\
+
+$\boxed{Y_{i,1}, \dots, Y_{i,p}}$\\
+\\
+
+$\boxed{\mu_{i,1}, \dots, \mu_{i,p} \hspace{.5em},\hspace{.5em}  \sigma^2}$\\
+\\
+\\
+
+$\boxed{\mu_0, V_{\mu} \hspace{3em} s_1,s_2}$\\
+
+
+
+
+
+
+%
+%
+%
+%
+%
+%$\boxed{\overrightarrow{y^{(0)}} \hspace{3em} \overrightarrow{y} \sim N_3(\vec{\mu}, \Sigma)}$ \\
+%
+%
+%
+%$\boxed{\sigma \qquad \vec{\mu} \sim N_3 (\vec{\mu_0}, V_\mu)}$\\
+%
+%$\Sigma \sim wish(V,df)$\\
+%
+%
+%
+%$X \sim N_p(\mu,\Sigma)$\\
+%$X^0_{i,j} \sim N(X_{i,j}, \Sigma_{obs}) $\\
+%$\mu \sim N $\\
+%$\Sigma \sim IW $\\
 
 
 
