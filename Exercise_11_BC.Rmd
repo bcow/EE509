@@ -1,0 +1,350 @@
+---
+title: "Exercise_11_BC"
+author: "Betsy Cowdery"
+date: "November 24, 2014"
+output: html_document
+---
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+alcesdata <- read.table("~/R Projects/EE509/data/alcesdata.txt", header=TRUE, quote="\"")
+
+library(rjags)
+library(coda)
+library(mvtnorm)
+
+run = TRUE
+if(file.exists("HW11.outputs.Rdata")){
+  load("HW11.outputs.Rdata")
+  run = FALSE
+  }
+
+```
+
+
+# The discrete-time exponential growth model
+
+#### The model
+
+```{r,eval=FALSE}
+model{
+  r~dnorm(0,.001)
+  tau~dgamma(.001,.001)
+  sigma~dgamma(.001,.001)
+
+  x[1]~dnorm(0,.001) 
+  y[1]~dnorm(x[1],tau)
+  
+  for (i in 2:N){ 
+    u[i]<-x[i-1] + r
+    x[i]~dnorm(u[i],sigma)
+    y[i]~dnorm(x[i],tau)
+  }
+}
+```
+
+
+```{r,echo=FALSE}
+if(run){
+Model1 = "
+model{
+  r~dnorm(0,.001)
+  tau~dgamma(.001,.001)
+  sigma~dgamma(.001,.001)
+
+  x[1]~dnorm(0,.001) 
+  y[1]~dnorm(x[1],tau)
+  
+  for (i in 2:N){ 
+    u[i]<-x[i-1] + r
+    x[i]~dnorm(u[i],sigma)
+    y[i]~dnorm(x[i],tau)
+  }
+}
+"
+data = list(y=log(alcesdata$density), N=length(alcesdata$density))
+init = NULL
+
+j.model   <- jags.model (file = textConnection(Model1),
+                         data = data,
+                         inits = init,
+                         n.chains = 3)
+update(j.model,2000)
+b1   <- coda.samples (model = j.model,
+                      variable.names = c("r","tau","sigma",'y'),
+                      n.iter=300000,
+                      thin=50
+                      )
+bmcmc1 = b1
+dic1 <- dic.samples(j.model, n.iter=300000, thin=50, "pD")
+# gelman.plot(bmcmc1) 
+# autocorr.plot(bmcmc1)
+# cumuplot(bmcmc1)
+# plot(bmcmc1)
+}
+# summary(bmcmc1)
+```
+
+#### Plots
+
+a) Plots of the time series data on both the LOG and LINEAR scales that include the model mean and credible intervals.
+
+```{r,echo=FALSE}
+bmcmc1.df<-as.data.frame(as.matrix(bmcmc1))
+y1 <- bmcmc1.df[4:51]
+
+plot(alcesdata$year,colMeans(exp(y1)), type="o", ylim=c(0,max(sapply(exp(y1), quantile, 0.975))))
+points(alcesdata$year,alcesdata$density, pch=19)
+lines(alcesdata$year,sapply(exp(y1), quantile, 0.975), col=3, lty=2, lwd = 2)
+lines(alcesdata$year,sapply(exp(y1), quantile, 0.025), col=3, lty=2, lwd = 2)
+legend("topleft", legend = c("observed value", "estimated value", "credible intervals"), lty= c(1,1,2), pch=c(19,1,NA), col=c(1,1,3), lwd=c(1,1,2))
+
+
+
+plot(alcesdata$year,colMeans(y1), type="o", ylim=c(0,max(sapply(y1, quantile, 0.975))))
+points(alcesdata$year,log(alcesdata$density), pch=19)
+lines(alcesdata$year,sapply(y1, quantile, 0.975), col=3, lty=2, lwd = 2)
+lines(alcesdata$year,sapply(y1, quantile, 0.025), col=3, lty=2, lwd = 2)
+legend("topleft", legend = c("observed value", "estimated value", "credible intervals"), lty= c(1,1,2), pch=c(19,1,NA), col=c(1,1,3), lwd=c(1,1,2))
+
+```
+
+
+b) Density plots for the predicted values for the missing data
+
+```{r,echo=FALSE}
+idx = which(is.na(alcesdata$density))
+bmcmc1.df <- as.data.frame(as.matrix(bmcmc1))
+
+par(mfrow=c(3,2))
+plot(density(bmcmc1.df$'y[18]'), main="Missing observation 18")
+plot(density(bmcmc1.df$'y[19]'), main="Missing observation 19")
+plot(density(bmcmc1.df$'y[20]'), main="Missing observation 20")
+plot(density(bmcmc1.df$'y[21]'), main="Missing observation 21")
+plot(density(bmcmc1.df$'y[44]'), main="Missing observation 44")
+```
+
+c) Density plots of the intrinsic growth rate, the observation error variance, and the process model error variance
+
+```{r,echo=FALSE}
+par(mfrow=c(1,3))
+plot(density(bmcmc1.df$r), main= "r")
+plot(density(bmcmc1.df$sigma), main = "sigma")
+plot(density(bmcmc1.df$tau), main = "tau")
+```
+
+
+# The Ricker model (discrete-time equivalent to logistic growth)
+
+#### The model 
+2.  Modify the exponential growth process model in the BUGS code to instead be the Ricker growth model.  Rerun including your BUGS code and the same figures as in part 1 plus plots for both the prior and posterior density on the carrying capacity.
+
+```{r, eval=FALSE}
+model{
+
+  for(i in 1:2){beta[i]~dnorm(0,.001)}
+  r <- beta[1]
+  K <- beta[1]/beta[2]
+  tau~dgamma(.001,.001)
+  sigma~dgamma(.001,.001)
+
+  x[1]~dnorm(0,.001) 
+  y[1]~dnorm(x[1],tau)
+
+  for (i in 2:N){ 
+    u[i]<-x[i-1] + beta[1] + beta[2]*exp(x[i-1])
+    x[i]~dnorm(u[i],sigma)
+    y[i]~dnorm(x[i],tau)
+
+  }
+}
+```
+
+```{r,echo=FALSE}
+if(run){
+Model2 = "
+model{
+
+  beta1~dnorm(0,.001)
+  beta2~dnorm(0,.001)
+  r <- beta1
+  K <- -beta1/beta2
+  tau~dgamma(.001,.001)
+  sigma~dgamma(.001,.001)
+
+  x[1]~dnorm(0,.001) 
+  y[1]~dnorm(x[1],tau)
+
+  for (i in 2:N){ 
+    u[i]<-x[i-1] + beta1 + beta2*exp(x[i-1])
+    x[i]~dnorm(u[i],sigma)
+    y[i]~dnorm(x[i],tau)
+
+  }
+}
+"
+init <- NULL
+init.cond <- list()
+init.cond[[1]] = list(beta2 = -.1/500, beta1 = .1)
+init.cond[[2]] = list(beta2 = -.1/400, beta1 = .1)
+init.cond[[3]] = list(beta2 = -.1/300, beta1 = .1)
+init = init.cond
+
+j.model   <- jags.model (file = textConnection(Model2),data = data,inits = init,n.chains = 3)
+
+update(j.model, 10000)
+b2   <- coda.samples (model = j.model,
+                      variable.names = c("tau","sigma", 'K', 'r','y'),
+                      n.iter=5000*50,
+                      thin=50
+                      )
+bmcmc2 = b2
+dic2 <- dic.samples(j.model, n.iter=5000*50, thin=50, "pD")
+
+}
+#summary(bmcmc2)
+#plot(bmcmc2)
+
+bmcmc2.df<-as.data.frame(as.matrix(bmcmc2))
+```
+
+```{r, echo=FALSE}
+if(run){
+  save(bmcmc1,bmcmc2,dic1,dic2, file="HW11.outputs.Rdata")
+}
+```
+
+
+#### Plots
+
+a) Plots of the time series data on both the LOG and LINEAR scales that include the model mean and credible intervals.
+
+```{r,echo=FALSE}
+bmcmc2.df<-as.data.frame(as.matrix(bmcmc2))
+y2 <- bmcmc2.df[(length(bmcmc2.df)-47):length(bmcmc2.df)]
+
+
+plot(alcesdata$year,colMeans(exp(y2)), type="o", ylim=c(0,max(sapply(exp(y2), quantile, 0.975))), xlab="Year", ylab = "Log Density")
+points(alcesdata$year,alcesdata$density, pch=19)
+lines(alcesdata$year,sapply(exp(y2), quantile, 0.975), col=3, lty=2, lwd = 2)
+lines(alcesdata$year,sapply(exp(y2), quantile, 0.025), col=3, lty=2, lwd = 2)
+legend("topleft", legend = c("observed value", "estimated value", "credible intervals"), lty= c(1,1,2), pch=c(19,1,NA), col=c(1,1,3), lwd=c(1,1,2))
+
+plot(alcesdata$year,colMeans(y2), type="o", ylim=c(0,max(sapply(y2, quantile, 0.975))), xlab="Year", ylab = "Density")
+points(alcesdata$year,log(alcesdata$density), pch=19)
+lines(alcesdata$year,sapply(y2, quantile, 0.975), col=3, lty=2, lwd = 2)
+lines(alcesdata$year,sapply(y2, quantile, 0.025), col=3, lty=2, lwd = 2)
+legend("topleft", legend = c("observed value", "estimated value", "credible intervals"), lty= c(1,1,2), pch=c(19,1,NA), col=c(1,1,3), lwd=c(1,1,2))
+```
+
+
+b) Density plots for the predicted values for the missing data
+
+```{r,echo=FALSE}
+idx = which(is.na(alcesdata$density))
+bmcmc2.df <- as.data.frame(as.matrix(bmcmc2))
+
+par(mfrow=c(3,2))
+plot(density(bmcmc2.df$'y[18]'), main="Missing observation 18")
+plot(density(bmcmc2.df$'y[19]'), main="Missing observation 19")
+plot(density(bmcmc2.df$'y[20]'), main="Missing observation 20")
+plot(density(bmcmc2.df$'y[21]'), main="Missing observation 21")
+plot(density(bmcmc2.df$'y[44]'), main="Missing observation 44")
+```
+
+c) Density plots of the intrinsic growth rate, the observation error variance, and the process model error variance
+
+```{r,echo=FALSE}
+par(mfrow=c(2,2))
+
+plot(density(bmcmc2.df$r), main = "r")
+plot(density(bmcmc2.df$K), main = "K")
+plot(density(bmcmc2.df$sigma), main = "sigma")
+plot(density(bmcmc2.df$tau), main = "tau")
+
+```
+
+
+3.	Construct a summary table that includes the parameters in both models, their 95% CI, and the model DIC scores.
+
+```{r, echo=FALSE}
+dic.vals <- function(dic){
+    deviance <- sum(sapply(dic$deviance,mean))
+    N <- length(dic$penalty[[1]])
+    psum <- rep(0, N)
+    for (i in 1:length(dic$penalty)) {
+        psum <- psum + dic$penalty[[i]]
+    }
+    return(list(dev = deviance, pen.dev = deviance + mean(psum)))
+}
+
+params <- rbind(
+  c(
+    mean(bmcmc1.df$sigma), quantile(bmcmc1.df$sigma, c(.025,.975)),
+    mean(bmcmc1.df$tau), quantile(bmcmc1.df$tau, c(.025,.975)),
+    mean(bmcmc1.df$r), quantile(bmcmc1.df$r, c(.025,.975)),
+    NA,NA,NA,
+    dic.vals(dic1)[[1]],dic.vals(dic1)[[2]]
+    ),
+  c(
+    mean(bmcmc2.df$sigma), quantile(bmcmc2.df$sigma, c(.025,.975)),
+    mean(bmcmc2.df$tau), quantile(bmcmc2.df$tau, c(.025,.975)),
+    mean(bmcmc2.df$r), quantile(bmcmc2.df$r, c(.025,.975)),
+    mean(bmcmc2.df$K), quantile(bmcmc2.df$K, c(.025,.975)),
+    dic.vals(dic2)[[1]],dic.vals(dic2)[[2]]
+    )
+  )
+colnames(params) <- c("sigma","2.5%","97.5%","tau","2.5%","97.5%","r","2.5%","97.5%","K","2.5%","97.5%","Mean deviance", "Penalized deviance")
+rownames(params) <- c("Exponential", "Ricker")
+
+print(params)
+
+```
+
+```{r, echo = FALSE}
+# plot(alcesdata$year,colMeans(exp(y2)), type="o", ylim=c(0,max(sapply(exp(y2), quantile, 0.975))), xlab="Year", ylab = "Log Density")
+# points(alcesdata$year,alcesdata$density, pch=19)
+# lines(alcesdata$year,sapply(exp(y1), quantile, 0.975), col=3, lty=2, lwd = 2)
+# lines(alcesdata$year,sapply(exp(y1), quantile, 0.025), col=3, lty=2, lwd = 2)
+# lines(alcesdata$year,sapply(exp(y2), quantile, 0.975), col=2, lty=2, lwd = 2)
+# lines(alcesdata$year,sapply(exp(y2), quantile, 0.025), col=2, lty=2, lwd = 2)
+# legend("topleft", legend = c("observed value", "estimated value", "Exponential CI", "Ricker CI"), lty= c(1,1,2,2), pch=c(19,1,NA,NA), col=c(1,1,3,2), lwd=c(1,1,2,2))
+# 
+# plot(alcesdata$year,colMeans(y1), type="o", ylim=c(0,max(sapply(y1, quantile, 0.975))))
+# points(alcesdata$year,log(alcesdata$density), pch=19)
+# lines(alcesdata$year,sapply(y1, quantile, 0.975), col=3, lty=2, lwd = 2)
+# lines(alcesdata$year,sapply(y1, quantile, 0.025), col=3, lty=2, lwd = 2)
+# lines(alcesdata$year,sapply(y2, quantile, 0.975), col=2, lty=2, lwd = 2)
+# lines(alcesdata$year,sapply(y2, quantile, 0.025), col=2, lty=2, lwd = 2)
+# legend("topleft", legend = c("observed value", "estimated value", "Exponential CI", "Ricker CI"), lty= c(1,1,2,2), pch=c(19,1,NA,NA), col=c(1,1,3,2), lwd=c(1,1,2,2))
+```
+
+4.	Briefly give an interpretation of your results.  Be sure to comment on which model is a better fit, what you can interpret about the importance of density dependence in regulating this population, and whether the population is at its carrying capacity.
+
+In this case, the exponential model has a lower mean and penalized DIC score which suggests that it is the better fitting model to the data. Since DIC penalizes for additional complexity, this might explain on reason why the logistic model gets a lower score. 
+
+We we look at the posteriors from the two models side by side, we can see that the exponential model give a more constrained estimate for both r and sigma. Ricker's model does make have a more constrained estimate on the observation error of Y. 
+The two models show practically no difference in their estimations of the missing values. This means that the Ricker model adds complexity without a major improvement in posteriors. Overall it appears that the exponential model is the better choice. 
+
+```{r, echo=FALSE}
+par(mfrow=c(1,3))
+plot(density(bmcmc1.df$r), main = "r", xlim=c(-.1,.4))
+lines(density(bmcmc2.df$r), col = 2)
+plot(density(bmcmc1.df$sigma), main = "sigma")
+lines(density(bmcmc2.df$sigma), col = 2)
+plot(density(bmcmc2.df$tau), main = "tau", xlim=c(0,400), col = 2)
+
+plot(density(bmcmc1.df$'y[18]'), main="Missing observation 18")
+lines(density(bmcmc2.df$'y[18]'), col=2)
+plot(density(bmcmc1.df$'y[19]'), main="Missing observation 19")
+lines(density(bmcmc2.df$'y[19]'), col=2)
+plot(density(bmcmc1.df$'y[20]'), main="Missing observation 20")
+lines(density(bmcmc2.df$'y[20]'), col=2)
+plot(density(bmcmc1.df$'y[21]'), main="Missing observation 21")
+lines(density(bmcmc2.df$'y[21]'), col=2)
+plot(density(bmcmc1.df$'y[44]'), main="Missing observation 44")
+lines(density(bmcmc2.df$'y[44]'), col=2)
+```
+
+5.	What can you infer about the relative importance of autogenic vs exogenous factors in regulating this population?
+
+In this it appears that since population is not dependent on a carrying capacity and thus density, population limitation must be dependent on exogenous factors.

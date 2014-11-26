@@ -7,7 +7,7 @@ output: html_document
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
 ## Set up data
-# library("rjags")
+library("rjags")
 library(coda)
 library(mvtnorm)
 # setwd(paste0(getwd(),"/Project/"))
@@ -389,6 +389,15 @@ When studies with missing observations are included, the standard errors begin t
 - Account for the fact that the data is summary data
 
 - Add random effects into the model
+    - site
+    - species
+
+- Model selection score - like DIC
+
+- Better initial conditions (?)
+
+- Are posteriors bilogically feasible?
+    - informative priors from Bety?
 
 
 # References
