@@ -113,7 +113,7 @@ plot(density(bmcmc1.df$K))
 
 
 # r = beta[1]
-# beta[2] = r/K --> K= r/beta[1]
+# beta[2] = r/K --> K= r/beta[2]
 # 
 # beta[1]+beta[2]*exp(x[i])
 
@@ -121,9 +121,11 @@ FitNorm = "
 model{
 
   for(i in 1:2){beta[i]~dnorm(0,.001)}
+  r <- beta[1]
+  K <- beta[1]/beta[2]
   tau~dgamma(.001,.001)
   sigma~dgamma(.001,.001)
-
+  
   x[1]~dnorm(0,.001) 
   y[1]~dnorm(x[1],tau)
 
@@ -131,7 +133,6 @@ model{
     u[i]<-x[i-1] + beta[1] + beta[2]*exp(x[i-1])
     x[i]~dnorm(u[i],sigma)
     y[i]~dnorm(x[i],tau)
-
   }
 }
 "
@@ -140,7 +141,7 @@ j.model   <- jags.model (file = textConnection(FitNorm),
                          inits = init,
                          n.chains = 3)
 b2   <- coda.samples (model = j.model,
-                      variable.names = c("beta","tau","sigma"),
+                      variable.names = c("y","r","K","sigma","tau"),
                       n.iter=100000,
                       burnin=2000,
                       thin=50

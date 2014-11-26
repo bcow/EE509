@@ -7,10 +7,11 @@ output: html_document
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
 ## Set up data
-# library("rjags")
+library("rjags")
 library(coda)
 library(mvtnorm)
-# setwd(paste0(getwd(),"/Project/"))
+
+#setwd(paste0(getwd(),"/Project/"))
 glopnet <- read.csv("glopnet.csv")
 glopnet[c("X")] <- NULL
 glopnet[c("X.1")] <- NULL
@@ -23,7 +24,10 @@ gdata.na <- as.data.frame(cbind(
   glopnet$log.Amass,
   glopnet$log.Nmass,
   glopnet$log.Pmass,
-  glopnet$log.Rdmass
+  glopnet$log.Rdmass 
+#   glopnet$Species, 
+#   glopnet$BIOME,
+#   glopnet$Dataset
   ))
 colnames(gdata.na)<-c("Log.LL","Log.LMA","Log.Amass","Log.Nmass","Log.Pmass","Log.Rmass")
 gdata <- na.omit(gdata.na)
@@ -64,7 +68,7 @@ pairs(gdata.na, panel=function(x,y){
   fit <- lm(y~x)
   p <- pf(summary(fit)$fstatistic[1],summary(fit)$fstatistic[2],summary(fit)$fstatistic[3], lower.tail = F)
 	if(p < .01){abline(fit, col='red',lwd=2)}
-  legend("top", legend=sprintf("R2 = %.2f",summary(fit)$r.squared), text.col="blue")
+  # legend("top", legend=sprintf("R2 = %.2f",summary(fit)$r.squared), text.col="blue")
 })
 ```
 
@@ -78,7 +82,7 @@ pairs(gdata, panel=function(x,y){
   fit <- lm(y~x)
   p <- pf(summary(fit)$fstatistic[1],summary(fit)$fstatistic[2],summary(fit)$fstatistic[3], lower.tail = F)
   if(p < .01){abline(fit, col='red',lwd=2)}
-  legend("top", legend=sprintf("R2 = %.2f",summary(fit)$r.squared), text.col="blue")
+  #legend("top", legend=sprintf("R2 = %.2f",summary(fit)$r.squared), text.col="blue")
 })
 ```
 
@@ -208,18 +212,17 @@ model{
 if(run){
 MultModel = "
 model{
-prec.Sigma~dwish(Vsig[,],n)
-Sigma[1:n,1:n] <- inverse(prec.Sigma[,])
+  prec.Sigma~dwish(Vsig[,],n)
+  Sigma[1:n,1:n] <- inverse(prec.Sigma[,])
 
-mu[1:n]~dmnorm(mu0[],Vmu)
+  mu[1:n]~dmnorm(mu0[],Vmu)
 
-for(i in 1:N){
-Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
-for(j in 1:n){
-X[i,j]~dnorm(Y[i,j],10000000)
-}
-
-}
+  for(i in 1:N){
+    Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
+    for(j in 1:n){
+      X[i,j]~dnorm(Y[i,j],10000000)
+    }
+  }
 }"
 
 # Without na's 
@@ -389,6 +392,15 @@ When studies with missing observations are included, the standard errors begin t
 - Account for the fact that the data is summary data
 
 - Add random effects into the model
+    - site
+    - species
+
+- Model selection score - like DIC
+
+- Better initial conditions (?)
+
+- Are posteriors bilogically feasible?
+    - informative priors from Bety?
 
 
 # References
