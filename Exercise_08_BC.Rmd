@@ -13,17 +13,19 @@ load("data/Lab8_cone.RData")
 
 ###  AIC vs Likelihood Ratio Test
 
-```{r}
+**Lab Report Task 1**
+Compare the AICs for the two models, interpret the results for this test, and compare with the results from the LRT previously performed.
+```{r, echo=FALSE}
 AIC.combined = 2*lnL[1] + 2*3
 AIC.treatment  = 2*(lnL[2]+lnL[3]) + 2*6
-AIC.combined
-AIC.treatment
+sprintf("Combined treatments ACI : %f", AIC.combined)
+sprintf("Separate treatments ACI : %f", AIC.treatment)
 ```
 
 #### Compare the AICs for the two models, interpret the results for this test, and compare with the results from the LRT previously performed.
 
 ### Bootstrapped Interval Estimates
-```{r}
+```{r,echo=FALSE}
 ## bootstrap
 nboot <- 100    		## number of bootstrap samples
 npred <- 31				## number of X values you predict for
@@ -41,7 +43,7 @@ likfit = function(param,dia,ncone){
   b0 = param[2]
   b1 = param[3]
   cones = ncone > 0
-
+  
   ## trees with cones
   dia.cone  = dia[cones > 0]                ##find just the trees with cones
   g.cone = a0 * dia.cone^2			## Fecundity fnc - g(x)
@@ -53,13 +55,15 @@ likfit = function(param,dia,ncone){
   g.zero = a0 * dia.zero^2
   theta.zero    = pnorm(dia.zero,b0,b1)   	##maturation probit
   prob.zero = log((1-theta.zero) + theta.zero*dpois(0,g.zero))
-
+  
   return(-sum(prob.cone,prob.zero))
-}
+  }
 ```
 
- 
-```{r}
+**Lab Report Task 2**
+Generate density and CI plots for all 3 model parameters. Include three figures and a table of parameter estimates, standard errors, and CI.
+
+```{r, echo=FALSE}
 treatment <- c("AMB","CO2")
 
 for(n in 1:2){
@@ -100,35 +104,224 @@ for(n in 1:2){
     
     }
   
-  out <- rbind(
-    c(vars[1,n+1], )
-    )
-    
-  
+  for(v in c("mle", "conf.cone", "conf.mat", "pred.cone", "pred.mat","ci", "vars")){
+    assign(paste0(v,".",treatment[n]),eval(parse(text = v)))
+    }
   }
 
 ```
 
-### Model Intervals
+```{r,echo=FALSE}
+a0.table <- rbind(
+    c(colMeans(mle.AMB)["a0"], var(mle.AMB[,"a0"])/sqrt(length(mle.AMB[,"a0"])), ci.AMB["a0.ci",]),
+    c(colMeans(mle.CO2)["a0"], var(mle.CO2[,"a0"])/sqrt(length(mle.CO2[,"a0"])), ci.CO2["a0.ci",])  )
+colnames(a0.table)[2] <- "SE"
+rownames(a0.table) <- c("Ambient", "Elevated")
 
-```{r}
+b0.table <- rbind(
+    c(colMeans(mle.AMB)["b0"], var(mle.AMB[,"b0"])/sqrt(length(mle.AMB[,"b0"])), ci.AMB["b0.ci",]),
+    c(colMeans(mle.CO2)["b0"], var(mle.CO2[,"b0"])/sqrt(length(mle.CO2[,"b0"])), ci.CO2["b0.ci",])  )
+colnames(b0.table)[2] <- "SE"
+rownames(b0.table) <- c("Ambient", "Elevated")
 
-ci.mat  <- apply(conf.mat,2,quantile,c(0.025,0.5,0.975))
-ci.cone <- apply(conf.cone,2,quantile,c(0.025,0.5,0.975))
-pi.mat  <- apply(pred.mat,2,quantile,c(0.025,0.975))
-pi.cone <- apply(pred.cone,2,quantile,c(0.025,0.975)) 
+b1.table <- rbind(
+    c(colMeans(mle.AMB)["b1"], var(mle.AMB[,"b1"])/sqrt(length(mle.AMB[,"b1"])), ci.AMB["b1.ci",]),
+    c(colMeans(mle.CO2)["b1"], var(mle.CO2[,"b1"])/sqrt(length(mle.CO2[,"b1"])), ci.CO2["b1.ci",])  )
+colnames(b1.table)[2] <- "SE"
+rownames(b1.table) <- c("Ambient", "Elevated")
 
-## fecundity plot
-plot(b$diam,b$c00,col = b$tmt,ylim=c(0,30))
-lines(dseq,ci.cone[2,],col=2,lwd=3)   ## median model
-lines(dseq,ci.cone[1,],col=2,lty=2,lwd=3)  ## 95% CI
-lines(dseq,ci.cone[3,],col=2,lty=2,lwd=3)
-lines(dseq,pi.cone[1,],col=3,lty=2,lwd=3)	## 95% PI
-lines(dseq,pi.cone[2,],col=3,lty=2,lwd=3)
+
+a0.table
+b0.table
+b1.table
 ```
 
-#### Lab Report Task 3 Plot the confidence and predictive interval for the maturation process model. Include both this plot and the fecundity plot in your lab report.
+### Model Intervals
+
+```{r,echo=FALSE}
+
+ci.mat.AMB  <- apply(conf.mat.AMB,2,quantile,c(0.025,0.5,0.975))
+ci.cone.AMB <- apply(conf.cone.AMB,2,quantile,c(0.025,0.5,0.975))
+pi.mat.AMB  <- apply(pred.mat.AMB,2,quantile,c(0.025,0.975))
+pi.cone.AMB <- apply(pred.cone.AMB,2,quantile,c(0.025,0.975))
+
+ci.mat.CO2  <- apply(conf.mat.CO2,2,quantile,c(0.025,0.5,0.975))
+ci.cone.CO2 <- apply(conf.cone.CO2,2,quantile,c(0.025,0.5,0.975))
+pi.mat.CO2  <- apply(pred.mat.CO2,2,quantile,c(0.025,0.975))
+pi.cone.CO2 <- apply(pred.cone.CO2,2,quantile,c(0.025,0.975)) 
+
+```
 
 
+**Lab Report Task 3**
+Plot the confidence and predictive interval for the maturation process model. Include both this plot and the fecundity plot in your lab report.
 
-#### Lab Report Task 4 Repeat the bootstrap analysis for the elevated CO2 treatment. Include the figures and tables from tasks 2 & 3 for the elevated plots as well as a final plot that compares the model confidence intervals between the elevated and ambient data on one figure
+```{r,echo=FALSE}
+## fecundity plot
+plot(b$diam,b$c00,col = b$tmt,ylim=c(0,30),main = "Fecundity Model - Ambient", xlab ="tree diameter (m)", ylab = "cone count")
+lines(dseq,ci.cone.AMB[2,],col=4,lwd=3)   ## median model
+lines(dseq,ci.cone.AMB[1,],col=2,lty=2,lwd=3)  ## 95% CI
+lines(dseq,ci.cone.AMB[3,],col=2,lty=2,lwd=3)
+lines(dseq,pi.cone.AMB[1,],col=3,lty=2,lwd=3)  ## 95% PI
+lines(dseq,pi.cone.AMB[2,],col=3,lty=2,lwd=3)
+
+cones = (b$c00 > 0) 
+plot(b$diam,cones,col = b$tmt, main = "Maturation Model - Ambient", xlab ="tree diameter (m)", ylab = "presence of cones (boolean)")
+lines(dseq,ci.mat.AMB[2,],col=4,lwd=3)   ## median model
+lines(dseq,ci.mat.AMB[1,],col=2,lty=2,lwd=3)  ## 95% CI
+lines(dseq,ci.mat.AMB[3,],col=2,lty=2,lwd=3)
+lines(dseq,pi.mat.AMB[1,],col=3,lty=2,lwd=3)  ## 95% PI
+lines(dseq,pi.mat.AMB[2,],col=3,lty=2,lwd=3)
+
+## fecundity plot
+plot(b$diam,b$c00,col = b$tmt,ylim=c(0,30),main = "Fecundity Model - Elevated", xlab ="tree diameter (m)", ylab = "cone count")
+lines(dseq,ci.cone.CO2[2,],col=4,lwd=3)   ## median model
+lines(dseq,ci.cone.CO2[1,],col=2,lty=2,lwd=3)  ## 95% CI
+lines(dseq,ci.cone.CO2[3,],col=2,lty=2,lwd=3)
+lines(dseq,pi.cone.CO2[1,],col=3,lty=2,lwd=3)  ## 95% PI
+lines(dseq,pi.cone.CO2[2,],col=3,lty=2,lwd=3)
+
+plot(b$diam,cones,col = b$tmt, main = "Maturation Model - Elevated", xlab ="tree diameter (m)", ylab = "presence of cones (boolean)")
+lines(dseq,ci.mat.CO2[2,],col=4,lwd=3)   ## median model
+lines(dseq,ci.mat.CO2[1,],col=2,lty=2,lwd=3)  ## 95% CI
+lines(dseq,ci.mat.CO2[3,],col=2,lty=2,lwd=3)
+lines(dseq,pi.mat.CO2[1,],col=3,lty=2,lwd=3)  ## 95% PI
+lines(dseq,pi.mat.CO2[2,],col=3,lty=2,lwd=3)
+
+
+```
+
+** Lab Report Task 4 **
+Repeat the bootstrap analysis for the elevated CO2 treatment. Include the figures and tables from tasks 2 & 3 for the elevated plots as well as a final plot that compares the model confidence intervals between the elevated and ambient data on one figure
+
+```{r, echo=FALSE}
+
+## fecundity plot
+plot(b$diam,b$c00,col = "grey",ylim=c(0,30),main = "Comparison Fecundity - Elevated", xlab ="tree diameter (m)", ylab = "cone count")
+lines(dseq,ci.cone.AMB[2,],col=2,lwd=3)   ## median model
+lines(dseq,ci.cone.AMB[1,],col=2,lty=2,lwd=3)  ## 95% CI
+lines(dseq,ci.cone.AMB[3,],col=2,lty=2,lwd=3)
+lines(dseq,ci.cone.CO2[2,],col=3,lwd=3)   ## median model
+lines(dseq,ci.cone.CO2[1,],col=3,lty=2,lwd=3)  ## 95% CI
+lines(dseq,ci.cone.CO2[3,],col=3,lty=2,lwd=3)
+legend("topleft", c("amb","elv"), lty=c(1,1), col=c(2,3))
+
+## maturation plot
+plot(b$diam,cones,col = "grey", main = "Comparison Maturation Model - Elevated", xlab ="tree diameter (m)", ylab = "presence of cones (boolean)")
+lines(dseq,ci.mat.AMB[2,],col=2,lwd=3)   ## median model
+lines(dseq,ci.mat.AMB[1,],col=2,lty=2,lwd=3)  ## 95% CI
+lines(dseq,ci.mat.AMB[3,],col=2,lty=2,lwd=3)
+lines(dseq,ci.mat.CO2[2,],col=3,lwd=3)   ## median model
+lines(dseq,ci.mat.CO2[1,],col=3,lty=2,lwd=3)  ## 95% CI
+lines(dseq,ci.mat.CO2[3,],col=3,lty=2,lwd=3)
+legend("topleft", c("amb","elv"), lty=c(1,1), col=c(2,3))
+
+```
+
+**Extra Credit: Likelihood Profile Interval Estimates: Lab 3 Fire Scar data**
+
+```{r,echo=FALSE}
+load("data/Lab8_fire.RData")
+
+c_mle = out$par[1]      ## MLE for the parameter “C”
+lam_mle = out$par[2]        ## MLE for the parameter “Lambda”
+contour(rp*c_mle,rp*lam_mle,z,levels=c(350,360,370,380),xlab="C",ylab="Lambda")
+## add the  MLE's
+abline(v=c_mle,lty=2)
+abline(h=lam_mle,lty=2)
+
+## likelihood profile
+prof_lam <- function(c,lambda){   ## find the MLE holding lambda at a constant
+  -sum(dweibull(firedata,c,lambda,log=TRUE))
+}
+prof_c <- function(lambda,c){    ## find the MLE holding C at a constant
+  -sum(dweibull(firedata,c,lambda,log=TRUE))
+}
+
+## Profile for lambda
+
+lambdas     = lam_mle*rp        ## sequence of lambda values being evaluated
+lambda.like = numeric(nstep)        ## storage for lambda likelihood values
+CgivenL      = numeric(nstep)     ## storage for c value that pairs with the lambda
+for(i in 1:nstep){                  ## set lambda, solve for MLE
+  lout <- optimize(prof_lam,interval=range(c_mle*rp),maximum=FALSE,lambda=lambdas[i])
+  lambda.like[i] <- lout$objective      ## save the likelihood
+  CgivenL[i] = lout$minimum ## save the MLE of c
+}
+```
+
+
+**Lab Report Task 5**
+Modify the previous section of code to calculate the vector c.like, that is found by fixing the value of C and fitting using the prof_c likelihood function.  Be aware that you will need to flip many components of the code, including the order of the two variables in the “points” command.  Turn in the following:
+
+* R code for calculating c.like
+* Likelihood surface plot that has the points for BOTH the profile of lambda and the profile of C
+
+```{r}
+cs      = c_mle*rp        ## sequence of c values being evaluated
+c.like  = numeric(nstep)        ## storage for c likelihood values
+LgivenC = numeric(nstep)     ## storage for the lambda value that pairs with c
+for(i in 1:nstep){                  ## set c, solve for MLE
+  lout <- optimize(
+    prof_c,
+    interval=range(lam_mle*rp),
+    maximum=FALSE,
+    c=cs[i]
+    )
+  c.like[i] <- lout$objective      ## save the likelihood
+  LgivenC[i] = lout$minimum ## save the MLE of lambda
+  }
+contour(rp*c_mle,rp*lam_mle,z,levels=c(350,360,370,380),xlab="C",ylab="Lambda")
+abline(v=c_mle,lty=2)
+abline(h=lam_mle,lty=2)
+lines(cs,LgivenC,type='b',pch="+",cex=0.5) ## add points to the contour plot
+
+``````
+
+```{r,echo=FALSE}
+## Likelihood profile for each variable
+c.seq = c_mle*rp
+lambda.seq = lam_mle*rp
+# plot(c.seq,c.like,type='l',xlab="C",ylab="Likelihood", main = "Likelihood Profile for C")
+# plot(lambda.seq,lambda.like,type='l',xlab="Lambda",ylab="Likelihood", main = "Likelihood Profile for Lambda")
+```
+
+```{r,echo=FALSE}
+## Find threshold deviance from the chi-square test
+Dtest = qchisq(0.95,1)    ## Deviance for 95% CI
+Dthresh = 2*out$value + Dtest	## Deviance threshold value
+findThresh <- function(vec,Thr){	## find indices where vector crosses Thr
+	which(as.logical(diff(sign(vec-Thr))))		
+}
+
+## Plot CI's
+c.CI = c.seq[findThresh(c.like,Dthresh/2)]
+plot(c.seq,c.like,type='l',xlab="C",ylab="Likelihood", main = "Likelihood Profile for C")
+abline(h=Dthresh/2,lty=2) ## deviance is divided by 2 to convert to neg log likelihood
+abline(v=c.CI, col=4)
+```
+
+```{r,echo=FALSE}
+
+## Plot CI's
+lambda.CI = lambda.seq[findThresh(lambda.like,Dthresh/2)]
+plot(lambda.seq,lambda.like,type='l',xlab="Lambda",ylab="Likelihood", main = "Likelihood Profile for Lambda")
+abline(h=Dthresh/2,lty=2) ## deviance is divided by 2 to convert to neg log likelihood
+abline(v=lambda.CI, col=4)
+```
+
+** Lab Report Task 6**
+Modify the previous section of code to calculate the CI for lambda as well. Turn in the likelihood profile plots with the CI and threshold for both variables and report the numeric values for the MLE and CI for both parameters
+
+```{r,echo=FALSE}
+
+CI.table <- rbind(
+  c(c.CI[1],c.seq[which(c.like==min(c.like))],c.CI[2]),
+  c(lambda.CI[1],lambda.seq[which(lambda.like==min(lambda.like))],lambda.CI[2])
+  )
+
+colnames(CI.table) <- c("2.5%","MLE","97.5")
+rownames(CI.table) <- c("c","lambda")
+
+CI.table
+```
