@@ -14,13 +14,18 @@ PR2 = nlm(LnL,ic)
 
 # 1.  Plot seedling densities as a function of TDR
 
-plot(TDR,y)
-
+plot(TDR,y, xlab="TDR", ylab="Seedling Counts")
 
 # 2.  Fit the Poisson regression model using one of the methods above and turn in  the summary output (hint: for the second method you will need to define the initial condition vector ic) 
 
+# Using approach 1
+PR1 = glm(y ~ TDR, family=poisson(link="log"))
+coef(PR1)
 
-points(TDR, fitted(PR1))
+PR1.fit <- sort(fitted(PR1))
+PR1.idx <- sort(fitted(PR1), index.return=TRUE)[[2]]
+
+lines(TDR[PR1.idx], PR1.fit, lwd = 2)
 
 sPR1 <- summary(PR1)
 x <- seq(0,max(TDR),length=100)
