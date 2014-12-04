@@ -6,6 +6,6 @@
 
 export OMPI_MCA_btl=tcp,sm,self
 
-/home/ecowdery/EE509/Project/contours.cluster.R
+/usr2/collab/ecowdery/EE509/Project/contours.cluster.R
 
 wait

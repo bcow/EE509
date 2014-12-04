@@ -1,6 +1,8 @@
+#!/usr/bin/env Rscript
+
 library(MASS)
 
-load("Project/mus.Rdata")
+load("/usr2/collab/ecowdery/EE509/Project/mus.Rdata")
 
 v1 = c(); v2 = c();
 for(i in 1:5){
@@ -9,7 +11,7 @@ for(i in 1:5){
 }
 
 par(mfcol = c(1,1))
-k = 50
+k = nrow(out1.df)
 
 DEN.1 <- list()
 for(N in 1:length(v1)){
@@ -42,10 +44,10 @@ for(N in 1:length(v1)){
 
 par(mfrow=c(1,1))
 for(N in 1:15){
-  z.1 <- DEN.1[[N]]$z; CI.1 <- quantile(z.1,c(.5)) 
-  z.2 <- DEN.2[[N]]$z; CI.2 <- quantile(z.2,c(.5)) 
-  z.3 <- DEN.3[[N]]$z; CI.3 <- quantile(z.3,c(.5)) 
-  z.4 <- DEN.4[[N]]$z; CI.4 <- quantile(z.4,c(.5)) 
+  z.1 <- DEN.1[[N]]$z; CI.1 <- quantile(z.1,c(.5))
+  z.2 <- DEN.2[[N]]$z; CI.2 <- quantile(z.2,c(.5))
+  z.3 <- DEN.3[[N]]$z; CI.3 <- quantile(z.3,c(.5))
+  z.4 <- DEN.4[[N]]$z; CI.4 <- quantile(z.4,c(.5))
   
   xrange <- range(c(DEN.1[[N]]$x, DEN.3[[N]]$x, DEN.2[[N]]$x, DEN.4[[N]]$x))
   yrange <- range(c(DEN.1[[N]]$y, DEN.3[[N]]$y, DEN.2[[N]]$y, DEN.4[[N]]$y))
@@ -56,7 +58,4 @@ for(N in 1:15){
   contour(DEN.4[[N]],levels=CI.4, labels=c("97.5%"), add=TRUE, lty=1, col="blue")
 }
 
-save(DEN.1, DEN.2, DEN.3, DEN.4, file="Project/density.RdAta")
-
-
-
+save(DEN.1, DEN.2, DEN.3, DEN.4, file="/usr2/collab/ecowdery/EE509/Project/density.Rdata")
