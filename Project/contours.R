@@ -56,15 +56,19 @@ for(N in 1:15){
 
 par(mfrow=c(2,2))
 for(N in 1:15){
-  z <- DEN[[N]]$z
-  CI <- quantile(z,c(.5,.95)) 
-  contour(DEN[[N]],levels=CI, labels=c("97.5%"))
+  z <- DEN.1[[N]]$z
+  CI <- quantile(z,c(.05,.95)) 
+  contour(DEN.1[[N]],levels=CI, labels=c("97.5%"))
+  points(x,y)
   par(new=TRUE)
   V1 <- out4.df[,v1[N]][1:k]
   V2 <- out4.df[,v2[N]][1:k]
   plot(density(V1), ylim=c(0, 5*max(density(V1)$y)), col=2)
   par(new=TRUE)
   plot(density(V2)$y, density(V2)$x, type="l", xlim=c(0, 5*max(density(V2)$y)), col=2)
+  x <- out1.df[,v1[N]][1:k]
+  y <- out1.df[,v2[N]][1:k]
+    
 }
 
 
