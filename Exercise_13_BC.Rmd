@@ -1,0 +1,215 @@
+---
+title: "Exercise_13_BC"
+author: "Betsy Cowdery"
+date: "December 1, 2014"
+output: html_document
+---
+
+# Part 1: Ozone Concentrations
+
+```{r, echo=FALSE}
+library(spatial)          ## spatial stats library
+library(maps)               ## map of US
+load("data/Ozone.RData")       ## data
+plot(dat$Lon,dat$Lat,xlim=c(-125,-65),ylim=c(25,50),asp=70/50,pch="+",col=dat$Mean/10)
+map("state",add=TRUE)     ## add the states and then a legend
+legend("bottomright",legend=2:8*10,col=2:8,pch="+",cex=1.25)
+surf0 <- surf.ls(0,dat$Lon,dat$Lat,dat$Mean)   ## 0-degree polynomial surface
+tr0 <- trmat(surf0,-125,-65,25,50,50)          ## project a 50x50 matrix within region
+image(tr0,asp=70/50)                           ## make an color image map of the surface
+map("state",add=TRUE)
+points(dat$Lon,dat$Lat,pch="+",col=dat$Mean/10)
+```
+
+## Task 1
+
+**1. Calculate the trend surface for higher order polynomials. Do higher order polynomials capture large scale trends or are all the trends finer scale? What order polynomial would you choose to detrend your data?**
+
+```{r, echo=FALSE}
+par(mfrow = c(3,2))
+
+## 1-degree 
+surf1 <- surf.ls(1,dat$Lon,dat$Lat,dat$Mean)   
+tr1 <- trmat(surf1,-125,-65,25,50,50)
+image(tr1,asp=70/50)                           
+map("state",add=TRUE)
+points(dat$Lon,dat$Lat,pch="+",col=dat$Mean/10)
+title("1-degree polynomial surface")
+
+## 2-degree 
+surf2 <- surf.ls(2,dat$Lon,dat$Lat,dat$Mean)   
+tr2 <- trmat(surf2,-125,-65,25,50,50)
+image(tr2,asp=70/50)                           
+map("state",add=TRUE)
+points(dat$Lon,dat$Lat,pch="+",col=dat$Mean/10)
+title("2-degree polynomial surface")
+
+## 3-degree 
+surf3 <- surf.ls(3,dat$Lon,dat$Lat,dat$Mean)   
+tr3 <- trmat(surf3,-125,-65,25,50,50)
+image(tr3,asp=70/50)                           
+map("state",add=TRUE)
+points(dat$Lon,dat$Lat,pch="+",col=dat$Mean/10)
+title("3-degree polynomial surface")
+
+## 4-degree 
+surf4 <- surf.ls(4,dat$Lon,dat$Lat,dat$Mean)   
+tr4 <- trmat(surf4,-125,-65,25,50,50)
+image(tr4,asp=70/50)                           
+map("state",add=TRUE)
+points(dat$Lon,dat$Lat,pch="+",col=dat$Mean/10)
+title("4-degree polynomial surface")
+
+## 5-degree 
+surf5 <- surf.ls(5,dat$Lon,dat$Lat,dat$Mean)   
+tr5 <- trmat(surf5,-125,-65,25,50,50)
+image(tr5,asp=70/50)                           
+map("state",add=TRUE)
+points(dat$Lon,dat$Lat,pch="+",col=dat$Mean/10)
+title("5-degree polynomial surface")
+
+## 6-degree 
+surf6 <- surf.ls(6,dat$Lon,dat$Lat,dat$Mean)   
+tr6 <- trmat(surf6,-125,-65,25,50,50)
+image(tr6,asp=70/50)                           
+map("state",add=TRUE)
+points(dat$Lon,dat$Lat,pch="+",col=dat$Mean/10)
+title("6-degree polynomial surface")
+
+```
+From these plots, I'd choose a 4 degree polynomial - it appears to capture enough fine scale trends. 
+```{r,echo=FALSE}
+vg <- variogram(surf4,300,xlim=c(0,10),ylim=c(0,1.1*var(dat$Mean)))
+title("Variogram")
+abline(h=var(dat$Mean))                   ## asymptotic variance
+cg<- correlogram(surf4,300,xlim=c(0,10))  ## limit the range of radii to the initial decay
+title("Correlogram")
+```
+
+
+```{r, echo=FALSE}
+rng <- 1:10                   ## define the distance bins we want to use for the fit
+expfit <- function(theta){    ## negative log likelihood function
+  d = theta[1]
+  alpha = theta[2]
+  se = theta[3]
+  sigma = theta[4]
+  -sum(dnorm(cg$y[rng],expcov(cg$x[rng],d,alpha,se),sigma,log=TRUE)) 
+}
+efit <- optim(c(2,0.1,1,0.01),expfit)    ## numerical optimization
+efit
+```
+
+```{r, echo=FALSE}
+par(lwd=2,cex=1.1)
+cg <- correlogram(surf0,300,xlim=c(0,10))
+lines(cg$x,expcov(cg$x,efit$par[1],efit$par[2],efit$par[3]),lwd=3)
+#lines(cg$x,gaucov(cg$x,gfit$par[1],gfit$par[2],gfit$par[3]),col=2,lwd=3)
+#lines(cg$x,sphercov(cg$x,sfit$par[1],sfit$par[2],sfit$par[3],sfit$par[4]),col=3,lwd=3)
+legend("topright",legend=c("Exponential","Gaussian","Spherical"),col=1:3,lwd=2)
+
+
+```
+
+## Task 2
+
+**2. EXTRA CREDIT: There are two other correlation functions built into the spatial package, the Gaussian covariance gaucov and the spherical covariance sphercov. Derive MLE for these two functions via numerical optimization. Turn in an AIC table for the models you fit and identify the best fitting model that you will use for Kriging**
+
+**3. Explain the figure generated from the previous box of code. What is being plotted (axes, data, model)? How would you interpret this figure? How would you interpret the parameters of the best-fit model? What is the range? Note: you do not need to include the Gaussian and spherical lines if you did not fit them in the previous step.**
+
+
+## Task 3
+**4. Include your kriged map of mean US ozone for 2008 in your lab report. Where in the country has the highest ozone levels?**
+
+```{r, echo=FALSE}
+KrExp <- surf.gls(0,expcov,dat$Lon,dat$Lat,dat$Mean,
+           d=efit$par[1],alpha=efit$par[2],se=efit$par[3])  ##construct surface
+pr3 <- prmat(KrExp,-125,-65,25,50,100)                      ## predict to a matrix
+image(pr3,main="Krige Prediction",cex.main=2,asp=70/50)                ## image of predictions
+contour(pr3,add=TRUE,lwd=1) ## conv to ppb                  ## contours of prediction
+map("state",add=TRUE)
+points(dat$Lon,dat$Lat,pch="+",col=dat$Mean/10,cex=0.5)
+```
+
+**Generate a second map of mean US ozone but this time include contours based on the error matrix rather than the prediction matrix. Where are ozone levels most uncertain?**
+
+```{r, echo=FALSE}
+se3 <- semat(KrExp,-125,-65,25,50,150)                      ## error matrix
+image(se3,main="Krige Standard Error",cex.main=2,asp=70/50)                ## image of errors
+contour(se3,add=TRUE,lwd=1) ## conv to ppb  
+map("state",add=TRUE)
+
+se3 <- semat(KrExp,-125,-65,25,50,150)                      ## error matrix
+image(se3,main="Krige",cex.main=2,asp=70/50)                ## image of errors
+contour(se3,add=TRUE,lwd=1) ## conv to ppb  
+map("state",add=TRUE)
+points(dat$Lon,dat$Lat,pch="+",col=dat$Mean/10,cex=0.5)
+```
+
+**.5 There are a few reasons that one might be skeptical of this initial exploratory map. Name at least two and describe ways the model could be improved (without collecting additional data).**
+
+# Part 2:National Ozone Time Series
+
+## Task 4
+
+**7. Include the time series plot and briefly describe the features of the overall trend in ozone concentrations.**
+
+```{r, echo=FALSE}
+xt <- ts(ozone$Mean,start=1980,end=2008)  ## convert data to a time series object
+
+k <- c(0.1,0.2,0.4,0.2,0.1)      ## kernel
+fx <- filter(xt,k)               ## weighted moving average
+lx <- lowess(xt,f=1/3)
+plot(xt,type='b',ylab="ppm",xlab="Year",main="National Ozone Concentrations")
+lines(fx,col=3)
+lines(lx,col=2)
+legend("topright",legend=c("Weighted Moving Average", "Lowess Curve"), lty=c(1,1), col=c(3,2))
+```
+
+
+## Task 5
+
+**8. Does the detrended data meet the assumptions of second order stationarity? Why or why not?**
+
+```{r,echo=FALSE}
+rx = xt - lx$y        ## residuals around lowess curve
+plot(rx)              ## check for homoskedasticity
+abline(h=0,lty=2)
+hist(rx,10)              ## check for a normal distribution with mean=zero
+## Quantile-Quantile plot (by hand)
+n = length(rx)
+qseq = seq(0.5/n,length=n,by=1/n)
+plot(qnorm(qseq,0,sd(rx)),sort(rx),main="Quantile-Quantile")
+abline(0,1,lty=2)
+```
+
+**9. Does the first-difference time series meet the assumptions of second order stationarity? Why or why not?**
+
+```{r,echo=FALSE}
+dxt = diff(xt)
+plot(dxt)
+hist(dxt,10)
+```
+
+## Task 7 
+
+**12. Based on the diagnostics performed, what ARIMA model is likely to perform best? What orders should p, d, and q be? Why? Should you fit the model to xt or rx? 13. Fit the arima model you proposed using the function arima:**
+```{r, eval=FALSE}
+arima(xt,c(p,d,q))
+```
+**Then propose alternative models that are similar to the one you fit (e.g. increase or decrease orders by 1). Based on AIC scores what model provides the best fit? Provide a table of models you tried and their AIC scores.**
+
+```{r,echo=FALSE}
+acf(xt)    ## ACF on the original time series
+acf(rx)    ## ACF on the detrended data
+acf(dxt)   ## ACF on the first difference series
+pacf(xt)   ## Partial ACF of the time series
+pacf(rx)   ## Partial ACF of the detrended data
+pacf(dxt)  ## Partial ACF of the first differences
+```
+
+
+```{r, echo=FALSE}
+
+```
+# you can do summary(surf0)

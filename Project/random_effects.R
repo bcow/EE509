@@ -1,6 +1,7 @@
 library("rjags")
 library(coda)
 library(mvtnorm)
+library(nnet)
 
 setwd(paste0(getwd(),"/Project/"))
 glopnet <- read.csv("glopnet.csv")
@@ -27,9 +28,9 @@ MultModel = "
 model{
   prec.Sigma~dwish(Vsig[,],n)
   Sigma[1:n,1:n] <- inverse(prec.Sigma[,])
-
+  
   mu[1:n]~dmnorm(mu0[],Vmu)
-
+  
   for(i in 1:N){
     Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
     for(j in 1:n){
@@ -38,16 +39,51 @@ model{
   }
 }"
 
+# Without na's 
+j.data <- gdata
+N=dim(j.data)[1]; n=dim(j.data)[2]
+data = list(Y=j.data, N=N, n=n, Vsig = diag(n), mu0 = rep(0,n), Vmu = diag(.001,n))
+init = NULL
+j.model   <- jags.model (file = textConnection(MultModel),data = data,inits = init,n.chains = 3)
+# update(j.model, n.iter=1000)
+# j.out   <- coda.samples (model = j.model,variable.names= c("mu"),n.iter = 10000)
+# out2 = j.out
+
+
+# With na's 
+
+j.data <- gdata.na
+N=dim(j.data)[1]; n=dim(j.data)[2]
+data = list(X=j.data, N=N, n=n, Vsig = diag(n), mu0 = rep(0,n), Vmu = diag(.001,n))
+init = NULL
+j.model   <- jags.model (file = textConnection(MultModel), data = data, inits = init, n.chains = 3)
+# update(j.model, n.iter=1000)
+# j.out   <- coda.samples (model = j.model, variable.names= c("mu"), n.iter = 10000)
+# out4 = j.out
+
 
 RandMultModel = "
 model{
   prec.Sigma~dwish(Vsig[,],n)
   Sigma[1:n,1:n] <- inverse(prec.Sigma[,])
 
+  for(i in 1:nds){alpha.ds[i]~dnorm(0,tau.d)}
+  tau.d~dgamma(.001,.001)
+
+  a[1:N] <- DSI %*% alpha.ds[]
+
+  for(i in 1:N){
+    for(j in 1:n){
+      A[i,j] <- a[i]
+    }
+  }
+
+
   mu[1:n]~dmnorm(mu0[],Vmu)
 
   for(i in 1:N){
-    Y[i,1:n]~dmnorm(mu[],prec.Sigma[,])
+    Y[i,1:n]~dmnorm(Ex[i,1:n],prec.Sigma[,])
+    Ex[i,1:n]<- mu[1:n]+A[i,1:n]
     for(j in 1:n){
       X[i,j]~dnorm(Y[i,j],10000000)
     }
@@ -61,19 +97,10 @@ j.data$Dataset <- NULL
 N=dim(j.data)[1]; n=dim(j.data)[2]; nds = dim(DSI)[2]
 data = list(Y=j.data, N=N, n=n, nds=nds, DSI=DSI, Vsig = diag(n), mu0 = rep(0,n), Vmu = diag(.001,n))
 init = NULL
-j.model   <- jags.model (file = textConnection(MultModel),data = data,inits = init,n.chains = 3)
-
-
-update(j.model, n.iter=1000)
-j.out   <- coda.samples (model = j.model,variable.names= c("mu"),n.iter = 10000)
-out5 = j.out
-
-
-
-# for(i in 1:nds){alpha.ds[i]~dnorm(0,tau.d)}
-# tau.d~dgamma(.001,.001)
-# a[1:N] <-DSI %*% alpha.ds[]
-
+j.model   <- jags.model (file = textConnection(RandMultModel),data = data,inits = init,n.chains = 3)
+# update(j.model, n.iter=1000)
+# j.out   <- coda.samples (model = j.model,variable.names= c("mu"),n.iter = 10000)
+# out = j.out
 
 
 # With na's 

@@ -226,6 +226,11 @@ load("data/Lab8_fire.RData")
 c_mle = out$par[1]      ## MLE for the parameter “C”
 lam_mle = out$par[2]        ## MLE for the parameter “Lambda”
 contour(rp*c_mle,rp*lam_mle,z,levels=c(350,360,370,380),xlab="C",ylab="Lambda")
+#par(new=TRUE)
+#contour(rp*c_mle,rp*lam_mle,z,levels=quantile(z,c(.5,.25,.025)),xlab="C",ylab="Lambda", col=2)
+
+
+
 ## add the  MLE's
 abline(v=c_mle,lty=2)
 abline(h=lam_mle,lty=2)

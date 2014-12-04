@@ -46,7 +46,7 @@ The **trmat** (trend matrix) command takes the output of the surf.ls command and
 
 Now that we've calculated a trend surface let’s calculate the correlogram and variogram in order to estimate the scale of spatial autocorrelation. *In the code below, make sure to substitute **surf0** with the polynomial surface you chose from Task 1*:
  
- ```{r}
+```{r}
 vg <- variogram(surf0,300,xlim=c(0,10),ylim=c(0,1.1*var(dat$Mean)))
 
 abline(h=var(dat$Mean))                   ## asymptotic variance

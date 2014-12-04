@@ -138,7 +138,7 @@ if(run){
   init = NULL
   j.model   <- jags.model (file = textConnection(UnivModel),data = data,inits = init, n.chains = 3)
   update(j.model, n.iter=1000)
-  j.out   <- coda.samples (model = j.model,variable.names= c("mu"), n.iter = 10000)
+  j.out   <- coda.samples (model = j.model,variable.names= c("mu","prec.Sigma"), n.iter = 10000)
   out1 = j.out
   
   
@@ -149,7 +149,7 @@ if(run){
   init = NULL
   j.model   <- jags.model (file = textConnection(UnivModel),data = data,inits = init, n.chains = 3)
   update(j.model, n.iter=1000)
-  j.out   <- coda.samples (model = j.model,variable.names= c("mu"), n.iter = 10000)
+  j.out   <- coda.samples (model = j.model,variable.names= c("mu","prec.Sigma"), n.iter = 10000)
   out3 = j.out
   }
 
@@ -232,7 +232,7 @@ data = list(Y=j.data, N=N, n=n, Vsig = diag(n), mu0 = rep(0,n), Vmu = diag(.001,
 init = NULL
 j.model   <- jags.model (file = textConnection(MultModel),data = data,inits = init,n.chains = 3)
 update(j.model, n.iter=1000)
-j.out   <- coda.samples (model = j.model,variable.names= c("mu"),n.iter = 10000)
+j.out   <- coda.samples (model = j.model,variable.names= c("mu","Sigma"),n.iter = 10000)
 out2 = j.out
 
 
@@ -244,7 +244,7 @@ data = list(X=j.data, N=N, n=n, Vsig = diag(n), mu0 = rep(0,n), Vmu = diag(.001,
 init = NULL
 j.model   <- jags.model (file = textConnection(MultModel), data = data, inits = init, n.chains = 3)
 update(j.model, n.iter=1000)
-j.out   <- coda.samples (model = j.model, variable.names= c("mu"), n.iter = 10000)
+j.out   <- coda.samples (model = j.model, variable.names= c("mu","Sigma"), n.iter = 10000)
 out4 = j.out
 
 
@@ -409,6 +409,34 @@ When studies with missing observations are included, the standard errors begin t
 
 [2] Wright, I.J. et al. The worldwide leaf economics spectrum. Nature 428, 821-827 (2004).
 
+#Looking at Sigma 
+
+Sigma
+               Log.LL     Log.LMA   Log.Amass   Log.Nmass   Log.Pmass   Log.Rmass
+Log.LL     0.24821316  0.10517382 -0.16248541 -0.08554957 -0.12719274 -0.12195986
+Log.LMA    0.10517382  0.09018780 -0.08594849 -0.05233751 -0.07462161 -0.06535533
+Log.Amass -0.16248541 -0.08594849  0.14449277  0.06872655  0.09541912  0.09386491
+Log.Nmass -0.08554957 -0.05233751  0.06872655  0.05579258  0.07003691  0.05715079
+Log.Pmass -0.12719274 -0.07462161  0.09541912  0.07003691  0.13286190  0.07886467
+Log.Rmass -0.12195986 -0.06535533  0.09386491  0.05715079  0.07886467  0.09736912
+
+var(gdata)
+               Log.LL      Log.LMA   Log.Amass   Log.Nmass    Log.Pmass   Log.Rmass
+Log.LL     0.05119710  0.030073709 -0.03351628 -0.02551575 -0.031023521 -0.03923470
+Log.LMA    0.03007371  0.042225352 -0.03452770 -0.01377535 -0.009000845 -0.02487981
+Log.Amass -0.03351628 -0.034527700  0.04681471  0.01949136  0.019106056  0.02973326
+Log.Nmass -0.02551575 -0.013775352  0.01949136  0.03419529  0.037182592  0.03387795
+Log.Pmass -0.03102352 -0.009000845  0.01910606  0.03718259  0.069031380  0.03675746
+Log.Rmass -0.03923470 -0.024879812  0.02973326  0.03387795  0.036757465  0.06372909
+
+abs(Sigma) >= var(gdata)
+          Log.LL Log.LMA Log.Amass Log.Nmass Log.Pmass Log.Rmass
+Log.LL      TRUE    TRUE      TRUE      TRUE      TRUE      TRUE
+Log.LMA     TRUE    TRUE      TRUE      TRUE      TRUE      TRUE
+Log.Amass   TRUE    TRUE      TRUE      TRUE      TRUE      TRUE
+Log.Nmass   TRUE    TRUE      TRUE      TRUE      TRUE      TRUE
+Log.Pmass   TRUE    TRUE      TRUE      TRUE      TRUE      TRUE
+Log.Rmass   TRUE    TRUE      TRUE      TRUE      TRUE      TRUE
 
 ```{r}
 
