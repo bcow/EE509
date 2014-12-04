@@ -10,7 +10,6 @@ for(i in 1:5){
   v2 = c(v2, (i+1):6)
 }
 
-par(mfcol = c(1,1))
 k = nrow(out1.df)
 
 tm1 <- system.time(
@@ -21,6 +20,7 @@ tm1 <- system.time(
     y <- out1.df[,v2[N]][1:k]
     den <- kde2d(x, y, n = length(x))
     DEN.1 <- append(DEN.1, list(den))
+    print(N)
   }
 })
 print(tm1)
