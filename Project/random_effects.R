@@ -3,12 +3,14 @@ library(coda)
 library(mvtnorm)
 library(nnet)
 
-setwd(paste0(getwd(),"/Project/"))
+setwd("/Users/elizabethcowdery/R Projects/EE509/Project")
 glopnet <- read.csv("glopnet.csv")
 glopnet[c("X")] <- NULL
 glopnet[c("X.1")] <- NULL
 glopnet[c("X.2")] <- NULL
 glopnet[c("X.3")] <- NULL
+
+DSI <- as.numeric(glopnet$Dataset)
 
 gdata.na <- as.data.frame(cbind(
   glopnet$log.LL,
@@ -16,12 +18,12 @@ gdata.na <- as.data.frame(cbind(
   glopnet$log.Amass,
   glopnet$log.Nmass,
   glopnet$log.Pmass,
-  glopnet$log.Rdmass, 
+  glopnet$log.Rdmass 
   #   glopnet$Species, 
   #   glopnet$BIOME,
-  glopnet$Dataset
+  #   glopnet$Dataset
 ))
-colnames(gdata.na)<-c("Log.LL","Log.LMA","Log.Amass","Log.Nmass","Log.Pmass","Log.Rmass", "Dataset")
+colnames(gdata.na)<-c("Log.LL","Log.LMA","Log.Amass","Log.Nmass","Log.Pmass","Log.Rmass")
 gdata <- na.omit(gdata.na)
 
 MultModel = "
@@ -70,20 +72,19 @@ model{
   for(i in 1:nds){alpha.ds[i]~dnorm(0,tau.d)}
   tau.d~dgamma(.001,.001)
 
-  a[1:N] <- DSI %*% alpha.ds[]
-
   for(i in 1:N){
     for(j in 1:n){
-      A[i,j] <- a[i]
+      a[i,j] <- alpha.ds[DSI[i]]
     }
   }
 
+  beta[1:n]~dmnorm(mu0[],Vmu)
 
-  mu[1:n]~dmnorm(mu0[],Vmu)
+  for(i in 1:N){mu[i,1:n] <- beta[1:n]+a[i,1:n]}
+
 
   for(i in 1:N){
-    Y[i,1:n]~dmnorm(Ex[i,1:n],prec.Sigma[,])
-    Ex[i,1:n]<- mu[1:n]+A[i,1:n]
+    Y[i,1:n]~dmnorm(mu[i,1:n],prec.Sigma[,])
     for(j in 1:n){
       X[i,j]~dnorm(Y[i,j],10000000)
     }
@@ -92,9 +93,7 @@ model{
 
 # Without na's 
 j.data <- gdata.na
-DSI <- class.ind(j.data$Dataset)
-j.data$Dataset <- NULL
-N=dim(j.data)[1]; n=dim(j.data)[2]; nds = dim(DSI)[2]
+N=dim(j.data)[1]; n=dim(j.data)[2]; nds = length(unique(DSI))
 data = list(Y=j.data, N=N, n=n, nds=nds, DSI=DSI, Vsig = diag(n), mu0 = rep(0,n), Vmu = diag(.001,n))
 init = NULL
 j.model   <- jags.model (file = textConnection(RandMultModel),data = data,inits = init,n.chains = 3)
