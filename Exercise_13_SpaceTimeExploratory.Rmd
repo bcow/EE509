@@ -137,7 +137,7 @@ lines(fx,col=3)
 Second, let’s look at a lowess curve.  Recall that a lowess curve also uses a moving window, but instead of an average it calculates a weighted regression model.  The second parameter to the lowess, f, is the window size expressed as a fraction of the whole time series.  In general, window sizes are much larger with the lowess approach than the moving window because we're fitting a curve through the points.  Feel free to play around with the size of f to see how it affects the smoothness of the curve.
  
 ```{r}
-lx <- lowess(xt,f=1/3)
+lx <- lowess(xt,f=.5)
 plot(xt,type='b',ylab="ppm",xlab="Year",main="National Ozone Concentrations")
 lines(fx,col=3)
 lines(lx,col=2)
@@ -165,8 +165,15 @@ As an alternative to detrending we can also look at the difference series for th
  
 ```{r}
 dxt = diff(xt)
-plot(dxt)
-hist(dxt,10)
+dxt1 = diff(xt, differences=1)
+dxt2 = diff(xt, differences=2)
+dxt3 = diff(xt, differences=3)
+dxt4 = diff(xt, differences=4)
+par(mfrow = c(4,2))
+plot(dxt1); hist(dxt1,10)
+plot(dxt2); hist(dxt2,10)
+plot(dxt3); hist(dxt3,10)
+plot(dxt4); hist(dxt4,10)
 ```
 
 ### Lab Report Task 5
@@ -191,8 +198,18 @@ Now that we've calculated a number of diagnostics, let’s explore how me might 
  ### Lab Report Task 7
 12.  Based on the diagnostics you have already performed, what ARIMA model is likely to perform best? What orders should p, d, and q be? Why? Should you fit the model to xt or rx?
 13.	Fit the arima model you proposed using the function arima: 
-```
+```{r, echo=FALSE}
 arima(xt,c(p,d,q))
+
+arima(xt, c(5,3,0))
+arima(xt, c(5,3,1))
+arima(xt, c(5,3,1))
+
+arima(rx, c(5,3,0))
+arima(rx, c(5,3,5))
+
+arima(xt, c(1,3,0))
+
 ```
 
 Then propose alternative models that are similar to the one you fit (e.g. increase or decrease orders by 1).  Based on AIC scores what model provides the best fit?  Provide a table of models you tried and their AIC scores.
